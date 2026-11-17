@@ -2356,7 +2356,7 @@ const QTC_BASE_SHIFT={Morning:'morning',Night:'night',Overnight:'over night'};
 /* the shift a row counts under in Analysis = the QTC's shift (the (M)/(N)/(ON) next to the name), even if the task was submitted in another shift.
    If the QTC's shift matches the submit shift, the exact shift (e.g. Morning 12 H) is kept; otherwise it goes to the QTC shift's main shift. */
 function effectiveShift(r){const ci=sIdx['Shift'];const sv=ci===undefined?'':String(r[ci]||'').trim().toLowerCase();const qi=sIdx['Qtc Name'];const qg=qi!==undefined?qtcShiftGroup(r[qi]):null;if(!qg)return sv;if(SHIFT_GROUP_OF[sv]===qg)return sv;return QTC_BASE_SHIFT[qg];}
-function isRowAllowed(r){const ci=sIdx['Shift'];if(ci===undefined)return true;const sv=effectiveShift(r);const anyOn=Object.values(shiftState).some(c=>c.on);if(!anyOn)return true;return Object.values(shiftState).some(c=>c.on&&sv===c.key);}
+function isRowAllowed(r){if(sIdx['Shift']===undefined)return true;let any=false,k,c;for(k in shiftState){if(shiftState[k].on){any=true;break;}}if(!any)return true;const sv=effectiveShift(r);for(k in shiftState){c=shiftState[k];if(c.on&&sv===c.key)return true;}return false;}
 function parseCSV(text){
   const rows=[];let row=[];let field='';let inQuotes=false;
   for(let i=0;i<text.length;i++){
@@ -3469,7 +3469,7 @@ function fallbackCopy(text,done){
 }
 function qLinkBtn(link){
   if(!link)return '<span style="color:var(--muted);font-size:.55rem">no link</span>';
-  const href=/^https?:\/\//i.test(link)?link:'';
+  const href=safeUrl(link);
   return href?`<a href="${esc(href)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--primary);font-weight:700;font-size:.6rem;text-decoration:none;white-space:nowrap">🔗 GULP Diff</a>`:`<span style="font-size:.55rem;color:var(--text-soft)">${esc(link)}</span>`;
 }
 function filterQualityById(val){
@@ -4098,7 +4098,8 @@ function setIdFilter(v,now){
   const run=()=>{idFilter=v.trim();saveFilters();applyAll();};
   if(now)run();else _idFilterDebounce=setTimeout(run,300);
 }
-function applyAll(){const idIdx=hdrs.findIndex(h=>h.toLowerCase()==='id');const idQ=idTokens(idFilter);fcache=rawRows.filter(r=>{if(!isRowAllowed(r))return false;if(selWeeks.size){const wl=getWeekLabel(rDate(r));if(!selWeeks.has(wl))return false;}if(selD.size&&!selD.has(rDate(r)))return false;if(!timeOk(r))return false;if(idQ.length&&idIdx>=0){const iv=String(r[idIdx]||'').toLowerCase();if(!idQ.some(q=>iv.includes(q)))return false;}for(const[k,ss]of Object.entries(sel)){if(!ss.size)continue;const ci=sIdx[k];if(ci===undefined)continue;if(!ss.has(String(r[ci]||'').trim()))return false;}return true;});saveFilters();updPills();updPresets();buildTabs();renderAllSections();}
+function applyAll(){const idIdx=hdrs.findIndex(h=>h.toLowerCase()==='id');const idQ=idTokens(idFilter);const _needD=selWeeks.size>0||selD.size>0,_wkMemo=new Map(),_act=[],_useId=idQ.length>0&&idIdx>=0;for(const k in sel){const ss=sel[k];if(!ss.size)continue;const ci=sIdx[k];if(ci===undefined)continue;_act.push(ci,ss);}
+fcache=rawRows.filter(r=>{if(!isRowAllowed(r))return false;if(_needD){const d=rDate(r);if(selWeeks.size){let wl=_wkMemo.get(d);if(wl===undefined){wl=getWeekLabel(d);_wkMemo.set(d,wl);}if(!selWeeks.has(wl))return false;}if(selD.size&&!selD.has(d))return false;}if(!timeOk(r))return false;if(_useId){const iv=String(r[idIdx]||'').toLowerCase();if(!idQ.some(q=>iv.includes(q)))return false;}for(let i=0;i<_act.length;i+=2){if(!_act[i+1].has(String(r[_act[i]]||'').trim()))return false;}return true;});saveFilters();updPills();updPresets();buildTabs();renderAllSections();}
 function updPills(){const w=document.getElementById('pillsRow');const ps=[];let any=false;if(idFilter){any=true;ps.push(`<span class="pill">🔎 ID${idTokens(idFilter).length>1?' ×'+idTokens(idFilter).length:''}: ${esc(idFilter.length>40?idFilter.slice(0,40)+'…':idFilter)} <span class="pill-x" onclick="setIdFilter('');const i=document.getElementById('idFilterInput');if(i)i.value='';">✕</span></span>`);}selWeeks.forEach(wk=>{any=true;ps.push(`<span class="pill">📅 ${esc(wk)} <span class="pill-x" onclick="tgWeek('${esc(wk)}')">✕</span></span>`);});selD.forEach(d=>{any=true;ps.push(`<span class="pill">${d===todayStr?'🗓️ '+d+' ⭐':'🗓️ '+d} <span class="pill-x" onclick="tgDate('${d}')">✕</span></span>`);});if(timeActive()){any=true;ps.push(`<span class="pill">🕒 ${timePreset?timePreset+' shift':(timeFrom||'…')+' → '+(timeTo||'…')} <span class="pill-x" onclick="clrTime()">✕</span></span>`);}for(const[k,ss]of Object.entries(sel)){ss.forEach(v=>{any=true;const sc=SC.find(s=>s.key===k);ps.push(`<span class="pill">${sc?sc.ic:''} ${esc(v)} <span class="pill-x" onclick="tgVal('${esc(k)}','${esc(v)}')">✕</span></span>`);});}w.innerHTML=any?ps.join('')+`<button class="clr-btn" onclick="clearAll()">✕ Clear All</button>`:'<span class="pill pill-all">All Data — No Filters Active</span>';}
 
 /* ===== PATCH #2: race-condition-safe tab switching (token guard) ===== */
@@ -4640,8 +4641,20 @@ function showToastUndo(msg,actionLabel,actionFn){
 function showErr(msg){if(navigator.onLine===false)msg="You're offline — we'll retry as soon as your connection returns";document.getElementById('mainContent').innerHTML=`<div class="errbox" role="alert">⚠️ ${esc(msg)}<div style="margin-top:12px"><button class="btn" onclick="loadData()">↻ Retry</button></div></div>`;document.getElementById('fstrip').innerHTML=`<div style="padding:10px 16px;font-size:.68rem;color:var(--danger)">${esc(msg)}</div>`;document.getElementById('locTabs').innerHTML='';}
 /* SECURITY helpers: jq() = safe for a JS string INSIDE an HTML attribute (onclick="f('${jq(x)}')"); safeUrl() = only http(s) links */
 function jq(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' ').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function safeUrl(u){try{const x=new URL(String(u||'').trim(),location.href);return (x.protocol==='https:'||x.protocol==='http:')?x.href:'#';}catch(e){return '#';}}
-function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function safeUrl(u){
+  /* never resolve against location.href: an empty / relative link used to turn into the dashboard's own URL */
+  u=String(u||'').trim();
+  if(!u)return '';
+  if(/^\/\//.test(u))u='https:'+u;
+  else if(!/^[a-z][a-z0-9+.-]*:/i.test(u)){
+    if(/^[\w-]+(\.[\w-]+)+(\/|$|\?)/.test(u))u='https://'+u;   // "domain.com/id/123" -> add https://
+    else return '';
+  }
+  try{const x=new URL(u);return (x.protocol==='https:'||x.protocol==='http:')?x.href:'';}catch(e){return '';}
+}
+function anLnk(t){const h=safeUrl(t.link);return h?`<a href="${esc(h)}" target="_blank" rel="noopener noreferrer">${esc(t.id)} ↗</a>`:`<span title="No task link">${esc(t.id)}</span>`;}
+const _ESC_MAP={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'},_ESC_T=/[&<>"']/,_ESC_G=/[&<>"']/g;
+function esc(s){s=String(s??'');return _ESC_T.test(s)?s.replace(_ESC_G,c=>_ESC_MAP[c]):s;}   /* 1 pass instead of 5, and no work at all when the text is already clean */
 function shootWebScrollTop(){
   const btn=document.getElementById('scrollTopBtn');
   if(!btn)return;
@@ -5032,7 +5045,7 @@ window.openQualityPerson=function(tr){
  const bars='<div class="pn-h">Quality</div>'+mets.map(([k,v])=>'<div class="pn-bar"><span title="'+esc(k)+'">'+esc(k)+'</span><div><i data-w="'+Math.max(4,Math.min(100,qPct(v)||0))+'" style="background:'+accTier(v).c+'"></i></div><em>'+qFmt(v)+'</em></div>').join('');
  const row=(k,v)=>v?'<div class="qpt-r"><span>'+k+'</span><em>'+v+'</em></div>':'';
  const list='<div class="pn-h">Tasks with quality ('+tasks.length+') <span class="qpt-hint">lowest first</span></div>'+tasks.map(t=>{
-  const tier=accTier(qNum(t.q.totalAccuracy)),url=String(t.q.gulpUrl||t.link||'').trim(),ok=/^https?:\/\//i.test(url);
+  const tier=accTier(qNum(t.q.totalAccuracy)),url=safeUrl(String(t.q.gulpUrl||t.link||'').trim()),ok=!!url;
   return '<div class="qpt"><div class="qpt-t"><b>'+esc(t.aid)+'</b><span style="color:'+tier.c+';background:'+tier.bg+';border:1px solid '+tier.bd+'">'+qFmt(qNum(t.q.totalAccuracy))+'</span></div>'
   +row('Sent to (QTC)',t.qtc?esc(t.qtc):'')+row('Actual Date',esc(t.q.actDate||''))+row('Expected Date',esc(t.q.expDate||''))
   +'<div class="qpt-r"><span>Artifacts \u00b7 Attr \u00b7 TVA</span><em>'+qFmt(qNum(t.q.artifacts))+' \u00b7 '+qFmt(qNum(t.q.attribute))+' \u00b7 '+qFmt(qNum(t.q.tvaF1))+'</em></div>'
@@ -5202,7 +5215,7 @@ new MutationObserver(function(){clearTimeout(tm);tm=setTimeout(build,120);}).obs
 </script>
 <script id="glass-greet">
 (function(){var sb=document.querySelector('.shift-banner');if(!sb)return;var g=document.createElement('div');g.className='greet';g.innerHTML='<h2 id="greetH"></h2><p>Here’s what’s happening across your shifts today</p>';sb.parentNode.insertBefore(g,sb);
-function up(){var h=new Date().getHours(),t=h<12?'Good morning':h<18?'Good afternoon':'Good evening';var u=document.getElementById('userName'),n=u?u.textContent.trim().split(/[\s@]/)[0]:'';document.getElementById('greetH').textContent=t+(n?', '+n:'');}up();setInterval(up,2000);})();
+function up(){var h=new Date().getHours(),t=h<12?'Good morning':h<18?'Good afternoon':'Good evening';var u=document.getElementById('userName'),n=u?u.textContent.trim().split(/[\s@]/)[0]:'';var el=document.getElementById('greetH'),v=t+(n?', '+n:'');if(el&&el.textContent!==v)el.textContent=v;}up();setInterval(function(){if(!document.hidden)up();},2000);})();
 </script>
 <script id="lite-wrap">
 (function(){
@@ -5510,7 +5523,7 @@ function anRowRefresh(id){   // re-draw just this row (fast — no full re-rende
 }
 function anRow(t){
   const l=anLog[t.id]||{},v=anCur(t.id),lock=anLocked(t.id),dirty=anIsDirty(t.id),need=anNeedIssue(v),issOn=anIssueOn(v);
-  return `<div class="an-row${dirty?' an-dirty':''}" data-id="${esc(t.id)}"><label class="an-sel" title="Select to copy several tasks"><input type="checkbox" class="sel-cb" data-k="an" ${(SEL.kind==='an'&&SEL.map.has(t.id))?'checked ':''}onchange="selToggle('an','${jq(t.id)}',this.checked)"></label><div class="an-c1"><a href="${esc(safeUrl(t.link))}" target="_blank" rel="noopener noreferrer">${esc(t.id)} ↗</a><small>${t.ts}</small></div><div class="an-c2"><span${anRepOf('lab',t.lab)?' class="an-bad"':''}><i>Labeler</i>${esc(t.lab)}${anRepBadge('lab',t.lab)}</span><span${anRepOf('qc',t.qc)?' class="an-bad"':''}><i>QTC</i>${esc(t.qc)}${anRepBadge('qc',t.qc)}</span></div><div class="an-c3">${esc(t.type)} · ${esc(t.pass)}<small>🧩 ${t.obj==null?'—':t.obj.toLocaleString()} objects</small>${l.analyst?`<span class="an-by${anNorm(l.analyst)===anNorm(anMyName())?' me':''}" title="Analyzed by ${esc(l.analyst)}">✔ ${esc(l.analyst)}</span>`:'<small>Not analyzed</small>'}</div><div class="an-rt"><i>Labeler rating</i>${anRateBtns(t.id,'L',v.lr,lock)}</div><div class="an-rt"><i>QTC rating</i>${anRateBtns(t.id,'Q',v.qr,lock)}</div><div class="an-act${issOn?'':' an-noiss'}"><textarea rows="1" class="an-iss${need?' an-need':''}"${issOn?'':' style="display:none"'} data-id="${esc(t.id)}" placeholder="${need?'Required — write the problem…':'Write the problem… (Enter to save)'}"${lock?' disabled':''} oninput="anTyping('${jq(t.id)}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();anCommit('${jq(t.id)}')}">${esc(v.issue||'')}</textarea>${anBtnHtml(t.id)}<button class="an-copy" type="button" title="Copy link, names, ratings and the problem (without the analyst name)" onclick="anCopy('${jq(t.id)}',this)">📋 Copy</button></div></div>`;
+  return `<div class="an-row${dirty?' an-dirty':''}" data-id="${esc(t.id)}"><label class="an-sel" title="Select to copy several tasks"><input type="checkbox" class="sel-cb" data-k="an" ${(SEL.kind==='an'&&SEL.map.has(t.id))?'checked ':''}onchange="selToggle('an','${jq(t.id)}',this.checked)"></label><div class="an-c1">${anLnk(t)}<small>${t.ts}</small></div><div class="an-c2"><span${anRepOf('lab',t.lab)?' class="an-bad"':''}><i>Labeler</i>${esc(t.lab)}${anRepBadge('lab',t.lab)}</span><span${anRepOf('qc',t.qc)?' class="an-bad"':''}><i>QTC</i>${esc(t.qc)}${anRepBadge('qc',t.qc)}</span></div><div class="an-c3">${esc(t.type)} · ${esc(t.pass)}<small>🧩 ${t.obj==null?'—':t.obj.toLocaleString()} objects</small>${l.analyst?`<span class="an-by${anNorm(l.analyst)===anNorm(anMyName())?' me':''}" title="Analyzed by ${esc(l.analyst)}">✔ ${esc(l.analyst)}</span>`:'<small>Not analyzed</small>'}</div><div class="an-rt"><i>Labeler rating</i>${anRateBtns(t.id,'L',v.lr,lock)}</div><div class="an-rt"><i>QTC rating</i>${anRateBtns(t.id,'Q',v.qr,lock)}</div><div class="an-act${issOn?'':' an-noiss'}"><textarea rows="1" class="an-iss${need?' an-need':''}"${issOn?'':' style="display:none"'} data-id="${esc(t.id)}" placeholder="${need?'Required — write the problem…':'Write the problem… (Enter to save)'}"${lock?' disabled':''} oninput="anTyping('${jq(t.id)}',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();anCommit('${jq(t.id)}')}">${esc(v.issue||'')}</textarea>${anBtnHtml(t.id)}<button class="an-copy" type="button" title="Copy link, names, ratings and the problem (without the analyst name)" onclick="anCopy('${jq(t.id)}',this)">📋 Copy</button></div></div>`;
 }
 function anTyping(id,val){anDraftSet(id,{issue:val});anMark(id);}
 /* auto-grow the Issue box so a long problem is fully visible */
@@ -5905,7 +5918,7 @@ function renderAnalysis(mc){
     const _anOpts=anCount(issBase.filter(t=>!anF.qc.size||anF.qc.has(t.qc)),t=>anLog[t.id].analyst||'—');
     const _qcOpts=anCount(issBase.filter(t=>!anF.analyst.size||anF.analyst.has(anLog[t.id].analyst||'—')),t=>t.qc);
     meta=iss.length+' issues';
-    body=`<div class="an-bar">${anRange()}${anDD('analyst','🧑‍💻 Analyst',_anOpts)}${anDD('qc','🏷 QTC',_qcOpts)}${(anF.analyst.size||anF.qc.size)?'<button class="preset" onclick="anF.analyst.clear();anF.qc.clear();anDone()">✕ Clear filters</button>':''}</div>`+`<div class="tbl-w" style="max-height:620px"><table class="an-t"><tr><th>Task</th><th>Time</th><th>Labeler</th><th>QTC</th><th>Type</th><th>Analyst</th><th>Issue / Problem</th></tr>`+iss.map(t=>`<tr><td><a href="${esc(safeUrl(t.link))}" target="_blank" rel="noopener noreferrer">${esc(t.id)} ↗</a></td><td>${t.ts}</td><td>${esc(t.lab)}</td><td>${esc(t.qc)}</td><td>${t.type}</td><td>${esc(anLog[t.id].analyst||'')}</td><td style="white-space:normal">${esc(anLog[t.id].issue)}</td></tr>`).join('')+'</table></div>';
+    body=`<div class="an-bar">${anRange()}${anDD('analyst','🧑‍💻 Analyst',_anOpts)}${anDD('qc','🏷 QTC',_qcOpts)}${(anF.analyst.size||anF.qc.size)?'<button class="preset" onclick="anF.analyst.clear();anF.qc.clear();anDone()">✕ Clear filters</button>':''}</div>`+`<div class="tbl-w" style="max-height:620px"><table class="an-t"><tr><th>Task</th><th>Time</th><th>Labeler</th><th>QTC</th><th>Type</th><th>Analyst</th><th>Issue / Problem</th></tr>`+iss.map(t=>`<tr><td>${anLnk(t)}</td><td>${t.ts}</td><td>${esc(t.lab)}</td><td>${esc(t.qc)}</td><td>${t.type}</td><td>${esc(anLog[t.id].analyst||'')}</td><td style="white-space:normal">${esc(anLog[t.id].issue)}</td></tr>`).join('')+'</table></div>';
   }
   mc.innerHTML=`<div class="an-wrap"><div id="anSyncBar" class="an-sync" style="display:none"></div><div class="sec" style="overflow:visible!important"><div class="sec-hd"><div class="sec-t">🔎 Analysis</div><div class="sec-m">${meta}</div></div>${anTabs()}${note}${body}</div></div>`;
   const _n=mc.querySelector('.tbl-w');if(_n)_n.scrollTop=_st;window.scrollTo(0,_wy);anUpdSaveAll();anUpdBanner();
