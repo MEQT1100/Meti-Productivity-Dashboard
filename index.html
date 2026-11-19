@@ -40,7 +40,7 @@ window.MEEG_CONFIG={
     {id:'1fDO5sgmtGNB6U3aPooV-GmAMA965Ng6bZW_IwtLb3wA',tabs:[{name:'Data Base'}]},   /* METI_Archive_2026_10 (October 2026) — tab read by NAME, no gid needed */
     {id:'1vpsYtvoZSKLsUeKj-FTXVGJmyFygSSck8DUIODJha_A',tabs:[{name:'Backup Date Base',gid:0}]}   /* the Backup sheet: archive only (it is no longer merged into the dashboard) */
   ],
-  AUTH_API_URL:'https://script.google.com/macros/s/AKfycbw5-s6OKJLkFXgl3m2O3gboJNfy_o_ijt36c3CyBuGVW79Q2FUXUeMxC8OgZUbCkXUMSA/exec',
+  AUTH_API_URL:'https://script.google.com/macros/s/AKfycbyKHaXXkPX_z4w7Rmt2JEIEHYfmEckYL95yJiiWsEcfuHt7LvvteNo8IIYpJmaxvTlLhQ/exec',
   MAIN_PUB_CSV:'',          /* PASTE HERE the "Publish to web" CSV link of the Data Base tab (File > Share > Publish to web > pick the tab > CSV). Google serves it from its cache, so 30 people refreshing every minute no longer get throttled. Empty = old direct export. */
   SHEETS_API_KEY:'AIzaSyDxj-kIRhx2za1YcwDkrrmfot-DWcuwuLo',        /* PASTE HERE a Google Sheets API key (see steps). Empty = the old refresh method is used. */
   DELTA_URL:'https://script.google.com/macros/s/AKfycbz-Qy_vuHVBShAok4Ud1LWqdypryuf345RSkE2-AszoeA7YdjabCMGbVXyzrch8dO5f_g/exec',   /* Apps Script delta endpoint (delta_script.gs v2, reads through the Sheets Advanced Service). Used when SHEETS_API_KEY is empty. Empty = old refresh method. */
@@ -1397,6 +1397,11 @@ html.lite .lg-dots,html.lite .lg-arc,html.lite .lg-core{animation:none!important
       <h1 class="lg-h">Welcome back</h1>
       <p class="lg-p">Sign in to continue to your dashboard.</p>
 
+      <div class="lg-field" id="loginRoleWrap" hidden>
+        <label class="lg-label" for="loginRoleSel">Role</label>
+        <div class="lg-inp"><select id="loginRoleSel" class="lg-input" style="padding-right:16px" onchange="lgRoleChg()"><option value="">Choose your role…</option><option>SV</option><option>QTC</option><option>QT</option><option>SSV</option><option>QM</option><option>TM</option><option>WLA</option></select></div>
+        <div class="lg-inp" id="loginSvWrap" hidden style="margin-top:8px"><select id="loginSvSel" class="lg-input" style="padding-right:16px"><option value="">Which SV?</option><option value="Floor SV">Floor SV</option><option value="Q&amp;T SV">Q&amp;T SV (follows the QT team)</option></select></div>
+      </div>
       <div class="lg-field" id="loginNameWrap" hidden>
         <label class="lg-label" for="loginNameInput">Full name</label>
         <div class="lg-inp">
@@ -1666,7 +1671,7 @@ function startUsersWatch(){
 
 /* ============ ADMIN: new access / password requests → bell + toast + browser notification ============
    Only the admin emails below see the bell. The server (auth-server.gs) checks the admin again on every call. */
-const REQ_ADMINS=['mahmoudseif589@gmail.com'];
+const REQ_ADMINS=['mahmoudseif589@gmail.com','heshamnaser996@gmail.com'];
 const REQ_POLL_MS=90000;
 let _reqTimer=null,_reqList=[],_reqKnown=new Set(),_reqFirst=true,_reqBusy=false,_reqBase=document.title;
 function reqEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -1829,7 +1834,7 @@ function reqRender(){
   if(c){c.textContent=n;c.style.display=n?'':'none';}
   document.title=(n?'('+n+') ':'')+_reqBase;
   const pn=document.getElementById('reqPanel');if(!pn||!pn.classList.contains('open'))return;
-  pn.innerHTML='<div class="rq-h">🔔 Pending requests ('+n+')</div>'+reqSndHtml()+(n?_reqList.map((x,i)=>'<div class="rq"><b>'+(x.type==='Reset'?'🔑 Password reset':'🆕 Access request')+'</b> — '+reqEsc(x.name||'')+'<small>'+reqEsc(x.email)+'</small><small>'+reqEsc(x.at||'')+'</small><div class="rq-b"><button class="rq-ok" onclick="reqDecide('+i+',\'Approved\')">✓ Approve</button><button class="rq-no" onclick="reqDecide('+i+',\'Rejected\')">✕ Reject</button></div></div>').join(''):'<div class="rq-e">No pending requests 🎉</div>');
+  pn.innerHTML='<div class="rq-h">🔔 Pending requests ('+n+')</div>'+reqSndHtml()+(n?_reqList.map((x,i)=>'<div class="rq"><b>'+(x.type==='Reset'?'🔑 Password reset':'🆕 Access request')+'</b> — '+reqEsc(x.name||'')+'<small>'+reqEsc(x.email)+(x.role?' · <b>'+reqEsc(x.role)+'</b>':'')+'</small><small>'+reqEsc(x.at||'')+'</small><div class="rq-b"><button class="rq-ok" onclick="reqDecide('+i+',\'Approved\')">✓ Approve</button><button class="rq-no" onclick="reqDecide('+i+',\'Rejected\')">✕ Reject</button></div></div>').join(''):'<div class="rq-e">No pending requests 🎉</div>');
 }
 function reqDecide(i,status){
   const x=_reqList[i];if(!x||_reqBusy)return;
@@ -1911,6 +1916,7 @@ function getLoggedInEmail(){
 let _loginStep='email',_loginBusy=false;
 
 /* ---- right-hand verification panel: 3 steps (Credentials → Security Check → Authentication) ---- */
+function lgRoleChg(){const r=document.getElementById('loginRoleSel').value;document.getElementById('loginSvWrap').hidden=r!=='SV';}
 function lgIdleMsg(step){return step==='setup'?'Create your password':(step==='login'?'Enter your password':(step==='signup'?'Request access':(step==='forgot'?'Reset your password':'Awaiting credentials')));}
 function lgSteps(done,run,msg){
   const side=document.getElementById('loginSide');if(!side)return;
@@ -1945,7 +1951,7 @@ function goLoginStep(step,msg){
   const free=step==='email'||step==='signup'||step==='forgot';   /* email is editable */
   const needPass=step==='login'||step==='setup'||step==='signup';
   eIn.readOnly=!free;
-  $('loginNameWrap').hidden=step!=='signup';
+  $('loginNameWrap').hidden=step!=='signup';$('loginRoleWrap').hidden=step!=='signup';
   $('loginPassWrap').hidden=!needPass;
   $('loginPass2Wrap').hidden=!(step==='setup'||step==='signup');
   $('loginAlt').style.display=(step==='email'||step==='login')?'':'none';
@@ -1999,13 +2005,15 @@ async function attemptLogin(){
       const nm=(nIn.value||'').trim(),pass=pIn.value;
       if(isSignup){
         if(nm.length<2)return fail('Please enter your full name',nIn);
+        var roleV=document.getElementById('loginRoleSel').value;if(roleV==='SV')roleV=document.getElementById('loginSvSel').value;
+        if(!roleV)return fail('Please choose your role',document.getElementById('loginRoleSel'));
         if(!pass)return fail('Please choose a password',pIn);
         if(pass.length<8)return fail('Password must be at least 8 characters',pIn);
         if(pass!==p2In.value)return fail('Passwords do not match',p2In);
       }
       delete _stCache[raw];errEl.textContent='Sending request…';lgSteps(0,0,'Sending request…');
       let r;
-      try{r=await authCall(isSignup?{action:'signup',name:nm,email:raw,password:pass}:{action:'forgot',email:raw});}catch(e){return fail('Could not reach the server — check your connection and try again');}
+      try{r=await authCall(isSignup?{action:'signup',name:nm,email:raw,password:pass,role:roleV}:{action:'forgot',email:raw});}catch(e){return fail('Could not reach the server — check your connection and try again');}
       let doneMsg='';
       if(r&&r.ok&&!r.pending)doneMsg=isSignup?'Request sent ✓ — you can sign in with this email and password once the administrator approves you.':'Reset request sent ✓ — once the administrator approves it, sign in with your email and create a new password.';
       else if((r&&r.ok&&r.pending)||(r&&r.error==='pending'))doneMsg='You already have a request waiting for approval ⏳';
@@ -2075,7 +2083,10 @@ async function attemptLogin(){
 
 /* ============ LOGGED-IN USER DISPLAY ============ */
 /* الاسم والـ Role بييجوا من تاب Users في الشيت (Display Name | Role | Email) */
-function getUserRole(email){const u=usersMap[String(email||'').trim().toLowerCase()];return u?String(u.role||'').trim():'';}
+function srvRole(e){try{return localStorage.getItem('meeg_role_'+String(e||'').trim().toLowerCase())||'';}catch(x){return '';}}
+function getUserRole(email){const u=usersMap[String(email||'').trim().toLowerCase()];const r=u?String(u.role||'').trim():'';return r||srvRole(email);}
+/* role chosen at sign-up lives on the auth server (people who are not in the Users tab) */
+function loadMyRole(){const em=getLoggedInEmail();if(!em)return;authCall({action:'me',token:getAuthToken()}).then(r=>{if(!r||!r.ok)return;const old=srvRole(em),nw=String(r.role||'');try{localStorage.setItem('meeg_role_'+em.trim().toLowerCase(),nw);}catch(x){}if(nw!==old){renderUserChip(false);try{if(typeof buildTabs==='function')buildTabs();}catch(x){}}}).catch(()=>{});}
 function getDisplayName(email){
   if(!email)return '';
   const _u=usersMap[String(email||'').trim().toLowerCase()];const custom=_u?String(_u.name||'').trim():'';
@@ -4726,7 +4737,7 @@ function shootWebScrollTop(){
   setTimeout(()=>{ window.scrollTo({top:0,behavior:'smooth'}); btn.style.transform=''; },140);
   setTimeout(()=>{ web.remove(); },520);
 }
-function startApp(){renderUserChip(false);
+function startApp(){renderUserChip(false);loadMyRole();
   if(!document.getElementById('splash')&&window._splashTpl)document.body.insertAdjacentHTML('afterbegin',window._splashTpl);
   fillWelcome();
   const savedTheme=localStorage.getItem('meeg_theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',savedTheme);const btn=document.getElementById('darkBtn');if(btn){btn.classList.toggle('active',savedTheme==='dark');btn.innerHTML=savedTheme==='dark'?'🌙 Dark':'☀️ Light';}applyAutoRefreshUI();hideSplash();setTimeout(loadData,350);startVersionPolling();(function _q(n){if(window._firstDataReady||n>40)fetchQualityData(true);else setTimeout(()=>_q(n+1),300);})(0);startQualityPolling();startUsersWatch();
@@ -5362,9 +5373,11 @@ const ANALYSIS_LOG_FILE_ID='1mVvo8cMvun5D9Okzx4Gx9HynZ04wruLo9GNm33c0SCo';   /* 
 const ANALYSIS_USERS={'mahmoudseif589@gmail.com':['Seeif Waleed','SV'],'heshamnaser996@gmail.com':['Hesham','SV'],'me917993@meti.ai':['Ahmed Sayed','QT'],'fpd.sobhy@gmail.com':['Mohmed Sobhy','QT'],'m6945663@gmail.com':['Mickey','QT'],'mohamedd.hafez.7@gmail.com':['Hafez','QT'],'mohamed.nasrr55@gmail.com':['Nasr','QT'],'mk2275489@gmail.com':['Mahmoud Khaled','QT']};  // only these accounts see the Analysis tab
 const ANALYSTS=['Ahmed Sayed','Mohmed Sobhy','Mickey','Hafez','Nasr','Mahmoud Khaled'];   // analyst dropdown (the QT accounts)
 function anMe(){return String(getLoggedInEmail()||'').trim().toLowerCase();}
-function anAllowed(){return !!ANALYSIS_USERS[anMe()];}
-function anMyName(){return ANALYSIS_USERS[anMe()]?ANALYSIS_USERS[anMe()][0]:'';}
-function anIsSV(){return (ANALYSIS_USERS[anMe()]||[])[1]==='SV';}
+const AN_ROLES=['QT','Q&T SV','QM','TM'];   // roles that see the Analysis tab (besides the fixed accounts above)
+function anUser(){const m=anMe();if(ANALYSIS_USERS[m])return ANALYSIS_USERS[m];const r=getUserRole(m);if(AN_ROLES.indexOf(r)<0)return null;return [getDisplayName(m),r==='QT'?'QT':'SV'];}
+function anAllowed(){return !!anUser();}
+function anMyName(){const u=anUser();return u?u[0]:'';}
+function anIsSV(){return (anUser()||[])[1]==='SV';}
 /* ---- My tasks: a task you saved stays in "My tasks" (and keeps its rating) even if the sheet writes the analyst name a bit differently ---- */
 function anNorm(x){return String(x||'').replace(/\s+/g,' ').trim().toLowerCase();}
 function anMineIds(){try{return JSON.parse(localStorage.getItem('an_mine_'+anMe())||'{}')||{};}catch(_){return {};}}
@@ -5695,7 +5708,7 @@ function anCommit(id){
   const v=anCur(id);
   if(!anIssueOn(v))v.issue='';
   if(anNeedIssue(v)){anBigAlert(id);return;}
-  const e={id:id,lr:v.lr||'',qr:v.qr||'',issue:String(v.issue||'').trim(),analyst:(anLog[id]&&anLog[id].analyst&&anIsSV()?anLog[id].analyst:ANALYSIS_USERS[anMe()][0]),date:((anLog[id]&&(extractDate(anLog[id].ts)||extractDate(anLog[id].date)))||anYmd(new Date())),ts:(anLog[id]&&anLog[id].ts)||'',rid:anNewRid()};   // editing a rating keeps the ORIGINAL day; today only for a first-time save
+  const e={id:id,lr:v.lr||'',qr:v.qr||'',issue:String(v.issue||'').trim(),analyst:(anLog[id]&&anLog[id].analyst&&anIsSV()?anLog[id].analyst:anMyName()),date:((anLog[id]&&(extractDate(anLog[id].ts)||extractDate(anLog[id].date)))||anYmd(new Date())),ts:(anLog[id]&&anLog[id].ts)||'',rid:anNewRid()};   // editing a rating keeps the ORIGINAL day; today only for a first-time save
   anLog[id]={analyst:e.analyst,lr:e.lr,qr:e.qr,issue:e.issue,date:e.date,ts:e.ts||''};   // instant: it is "Saved" right now
   anMineAdd(id);anRepC=null;
   delete anDraft[id];anFailed.delete(id);
