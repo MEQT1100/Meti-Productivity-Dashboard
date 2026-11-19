@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>METI Productivity</title>
-<meta name="app-version" content="27"/>
+<meta name="app-version" content="28"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://docs.google.com https://script.google.com https://*.googleusercontent.com https://sheets.googleapis.com; worker-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'"/>
 <meta name="referrer" content="no-referrer"/>
 <script id="lite-guard">
@@ -3967,6 +3967,13 @@ function fixTsDMY(row,ti,ci){
    Safety: the short name needs 2+ words; if one short name is the beginning of two DIFFERENT longer names (neither starts with the other) nothing is merged for it. */
 function canonQtc(){
   const ci=sIdx['Qtc Name'];if(ci===undefined)return;
+  /* typos in the bracket first: "(ON))" → "(ON)", "(ON" → "(ON)", "( ON )" → "(ON)" — otherwise the name never matches its short version */
+  {const fixed=new Map();let n=0;
+   for(let i=0;i<rawRows.length;i++){const r=rawRows[i],v=r[ci];if(!v||v.indexOf('(')<0)continue;
+     let f=fixed.get(v);
+     if(f===undefined){f=v.replace(/\(\s*([^()]*?)\s*\)*\s*$/,'($1)').replace(/\s+/g,' ').trim();fixed.set(v,f);}
+     if(f!==v){r[ci]=f;n++;}}
+   if(n)console.info('[names] fixed brackets in '+n+' rows');}
   const cnt=new Map();
   for(let i=0;i<rawRows.length;i++){const v=rawRows[i][ci];if(v)cnt.set(v,(cnt.get(v)||0)+1);}
   const info=[],groups=new Map();
