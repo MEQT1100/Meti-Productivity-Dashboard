@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>METI Productivity</title>
-<meta name="app-version" content="25"/>
+<meta name="app-version" content="26"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://docs.google.com https://script.google.com https://*.googleusercontent.com https://sheets.googleapis.com; worker-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'"/>
 <meta name="referrer" content="no-referrer"/>
 <script id="lite-guard">
@@ -3960,11 +3960,49 @@ function fixTsDMY(row,ti,ci){
   }
   row[ti]=y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0')+m[4];window._tsFixed=(window._tsFixed||0)+1;
 }
+/* ===== QTC NAME MERGE =====
+   When a QTC's name was later written in full (4 parts), his old and new rows showed as two people. Here every Qtc Name is grouped with the SHORTEST name
+   that is the beginning of it, only when the shift written in brackets is the same, and shown under that shortest name (search, filters, tables, Analysis, Quality).
+   Safety: the short name needs 2+ words; if one short name is the beginning of two DIFFERENT longer names (neither starts with the other) nothing is merged for it. */
+function canonQtc(){
+  const ci=sIdx['Qtc Name'];if(ci===undefined)return;
+  const cnt=new Map();
+  for(let i=0;i<rawRows.length;i++){const v=rawRows[i][ci];if(v)cnt.set(v,(cnt.get(v)||0)+1);}
+  const info=[],groups=new Map();
+  cnt.forEach((n,raw)=>{
+    const m=/^(.*?)\s*(\([^)]*\))\s*$/.exec(raw);
+    const base=(m?m[1]:raw).replace(/\s+/g,' ').trim(),sh=(m?m[2]:'').replace(/\s+/g,'').toLowerCase();
+    const toks=base.toLowerCase().split(' ').filter(Boolean);
+    const o={raw,toks,n};info.push(o);
+    (groups.get(sh)||groups.set(sh,[]).get(sh)).push(o);
+  });
+  const map=new Map(),ambiguous=[];
+  const isPre=(a,b)=>a.length<b.length&&a.every((t,i)=>t===b[i]);
+  groups.forEach(list=>{
+    list.sort((a,b)=>a.toks.length-b.toks.length);
+    list.forEach(b=>{
+      if(map.has(b.raw))return;
+      const shorter=list.filter(a=>a!==b&&a.toks.length>=2&&isPre(a.toks,b.toks));
+      if(!shorter.length)return;
+      const root=shorter[0];                                   // the shortest one (list is sorted by length)
+      const longer=list.filter(x=>x!==root&&isPre(root.toks,x.toks));
+      const clash=longer.some(x=>longer.some(y=>x!==y&&!isPre(x.toks,y.toks)&&!isPre(y.toks,x.toks)));
+      if(clash){ambiguous.push(root.raw+'  ⟵  '+longer.map(x=>x.raw).join(' | '));return;}
+      map.set(b.raw,root.raw);
+    });
+  });
+  if(ambiguous.length)console.warn('[names] NOT merged (one short name fits different longer names):',ambiguous);
+  if(!map.size)return;
+  let changed=0;
+  for(let i=0;i<rawRows.length;i++){const r=rawRows[i],t=map.get(r[ci]);if(t){r[ci]=t;changed++;}}
+  console.info('[names] merged '+map.size+' QTC name(s) into a shorter one · '+changed+' rows',Object.fromEntries(map));
+}
 function onCsvTable(table){
   if(!table.length){showErr('No data returned.');return;}hdrs=table[0].map(h=>String(h||'').trim());
   /* SOURCE sheet has BOTH "Task ID" (numeric) and "Id" (UUID). The dashboard works with the numeric one named "Id" → rename it, and hide the UUID column (header '—' = not shown) */
   {const _l=hdrs.map(h=>h.toLowerCase()),_t=_l.indexOf('task id');if(_t>=0){const _u=_l.indexOf('id');if(_u>=0&&_u!==_t)hdrs[_u]='—';hdrs[_t]='Id';}}
   const hLower=hdrs.map(h=>h.toLowerCase());sIdx={};["Shift","Unit","Qtc Name","Yubikey Email","Labeler Name","Pc No","Modality","Queue Name","Location","Pass"].forEach(name=>{const i=hLower.indexOf(name.toLowerCase());if(i>=0)sIdx[name]=i;});tsIdx=hLower.findIndex(h=>h==='timestamp');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='created at');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='date');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h.includes('date'));locColIdx=hLower.findIndex(h=>h==='location');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='unit');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='site');rawRows=[];window._tsFixed=0;const caIdx=hLower.indexOf('created at');const skippedShift={};for(let ri=1;ri<table.length;ri++){const rowRaw=table[ri];if(!rowRaw||!rowRaw.length)continue;table[ri]=null;const row=rowRaw;for(let ci=0;ci<hdrs.length;ci++){const v=row[ci];row[ci]=v===undefined?'':String(v).trim();}row.length=hdrs.length;if(row.every(c=>c===''))continue;const sci=sIdx['Shift'];if(sci!==undefined){const sv=String(row[sci]||'').replace(/\s+/g,' ').trim().toLowerCase();if(!ALL_SHIFTS.some(a=>sv===a)){const kk=sv||'(empty)';skippedShift[kk]=(skippedShift[kk]||0)+1;continue;}}fixTsDMY(row,tsIdx,caIdx);normRow(row);rawRows.push(row);}window._skippedShift=skippedShift;{const ks=Object.keys(skippedShift),tot=ks.reduce((a,k)=>a+skippedShift[k],0);if(tot>0){console.warn('Rows skipped (unknown Shift value):',skippedShift);const sig=JSON.stringify(skippedShift);if(window._skipSig!==sig){window._skipSig=sig;showToast('⚠️ '+tot+' row(s) skipped — unknown Shift: '+ks.slice(0,4).map(k=>'"'+k+'" ×'+skippedShift[k]).join(', ')+(ks.length>4?' …':''));}}}
+try{canonQtc();}catch(e){console.warn('[names] merge failed',e);}
 sOpts={};["Shift","Unit","Qtc Name","Yubikey Email","Labeler Name","Pc No","Modality","Queue Name","Location","Pass"].forEach(name=>{const ci=sIdx[name];if(ci===undefined)return;const set=new Set();rawRows.forEach(r=>{const v=String(r[ci]||'').trim();if(v)set.add(v);});sOpts[name]=[...set].sort();});const dateSet=new Set();rawRows.forEach(r=>{const d=extractDate(r[tsIdx]);if(d)dateSet.add(d);});sOpts['_dates']=[...dateSet].sort().reverse();const locSet=new Set();if(locColIdx>=0)rawRows.forEach(r=>{const v=String(r[locColIdx]||'').trim();if(v)locSet.add(v);});locations=[...locSet].sort();todayStr=cairoToday();document.getElementById('todayLabel').textContent=todayStr;lastUpdateTs=window._cacheTs||Date.now();window._cacheTs=null;updateRelativeTime();setTrafficLight('green');window._firstDataReady=true;document.getElementById('totalBadge').textContent=rawRows.length+' rows';SC.forEach(s=>{if(!sel[s.key])sel[s.key]=new Set();});if(!_filtersRestored){restoreFilters();_filtersRestored=true;}buildStrip();buildTabs();applyAll();if(autoRefreshEnabled&&!_nextAutoAt)_armAuto();applyAutoRefreshUI();if(cmpMode)populateCmpSelects();try{loadArchiveIds();}catch(e){}
 }
 const _MONTH_NAMES={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
