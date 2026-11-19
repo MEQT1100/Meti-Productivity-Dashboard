@@ -1398,9 +1398,27 @@ html.lite .lg-dots,html.lite .lg-arc,html.lite .lg-core{animation:none!important
       <p class="lg-p">Sign in to continue to your dashboard.</p>
 
       <div class="lg-field" id="loginRoleWrap" hidden>
-        <label class="lg-label" for="loginRoleSel">Role</label>
-        <div class="lg-inp"><select id="loginRoleSel" class="lg-input" style="padding-right:16px" onchange="lgRoleChg()"><option value="">Choose your role…</option><option>SV</option><option>QTC</option><option>QT</option><option>SSV</option><option>QM</option><option>TM</option><option>WLA</option></select></div>
-        <div class="lg-inp" id="loginSvWrap" hidden style="margin-top:8px"><select id="loginSvSel" class="lg-input" style="padding-right:16px"><option value="">Which SV?</option><option value="Floor SV">Floor SV</option><option value="Q&amp;T SV">Q&amp;T SV (follows the QT team)</option></select></div>
+        <style>
+#loginRoleWrap .lg-dd{position:relative}
+#loginRoleWrap .lg-dd-btn{-webkit-appearance:none;appearance:none;width:100%;height:50px;padding:0 16px;border-radius:14px;border:1px solid rgba(140,240,235,.18);background:rgba(255,255,255,.06);color:#eafcfb;font-family:var(--font);font-size:.95rem;text-align:left;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:border-color .2s,box-shadow .2s,background .2s}
+#loginRoleWrap .lg-dd-btn .ph{color:rgba(234,252,251,.45)}
+#loginRoleWrap .lg-dd-btn:hover{border-color:rgba(140,240,235,.38)}
+#loginRoleWrap .lg-dd.open .lg-dd-btn,#loginRoleWrap .lg-dd-btn:focus-visible{border-color:#00e5d4;box-shadow:0 0 0 3px rgba(0,229,212,.16);outline:none}
+#loginRoleWrap .lg-dd-btn.err{border-color:#ff6b81;box-shadow:0 0 0 3px rgba(255,107,129,.16)}
+#loginRoleWrap .lg-dd-btn svg{flex:none;opacity:.7;transition:transform .2s}
+#loginRoleWrap .lg-dd.open .lg-dd-btn svg{transform:rotate(180deg)}
+#loginRoleWrap .lg-dd-list{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;display:none;padding:6px;border-radius:14px;background:rgba(8,24,34,.97);border:1px solid rgba(140,240,235,.22);box-shadow:0 18px 40px rgba(0,0,0,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);max-height:260px;overflow:auto}
+#loginRoleWrap .lg-dd.open .lg-dd-list{display:block}
+#loginRoleWrap .lg-dd-opt{padding:10px 12px;border-radius:10px;color:#cfeeee;font-size:.92rem;cursor:pointer;display:flex;align-items:center;gap:8px}
+#loginRoleWrap .lg-dd-opt small{color:rgba(207,238,238,.5);font-size:.74rem;margin-left:auto}
+#loginRoleWrap .lg-dd-opt:hover{background:rgba(0,229,212,.12);color:#fff}
+#loginRoleWrap .lg-dd-opt.on{background:rgba(0,229,212,.16);color:#00e5d4;font-weight:700}
+#loginRoleWrap .lg-dd-opt.on::after{content:'✓';margin-left:auto}
+#loginRoleWrap .lg-dd-opt.on small{margin-left:8px}
+</style>
+        <label class="lg-label" for="loginRoleBtn">Role</label>
+        <div class="lg-dd" id="loginRoleDd"><input type="hidden" id="loginRoleSel" value=""><button type="button" class="lg-dd-btn" id="loginRoleBtn" onclick="lgDdToggle('loginRoleDd')"><span class="ph">Choose your role…</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><div class="lg-dd-list"><div class="lg-dd-opt" data-v="SV" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>SV</span></div><div class="lg-dd-opt" data-v="QTC" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>QTC</span></div><div class="lg-dd-opt" data-v="QT" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>QT</span></div><div class="lg-dd-opt" data-v="SSV" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>SSV</span></div><div class="lg-dd-opt" data-v="QM" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>QM</span></div><div class="lg-dd-opt" data-v="TM" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>TM</span></div><div class="lg-dd-opt" data-v="WLA" onclick="lgDdPick(this,'loginRoleSel','loginRoleBtn')"><span>WLA</span></div></div></div>
+        <div id="loginSvWrap" hidden style="margin-top:8px"><div class="lg-dd" id="loginSvDd"><input type="hidden" id="loginSvSel" value=""><button type="button" class="lg-dd-btn" id="loginSvBtn" onclick="lgDdToggle('loginSvDd')"><span class="ph">Which SV?</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button><div class="lg-dd-list"><div class="lg-dd-opt" data-v="Floor SV" onclick="lgDdPick(this,'loginSvSel','loginSvBtn')"><span>Floor SV</span></div><div class="lg-dd-opt" data-v="Q&amp;T SV" onclick="lgDdPick(this,'loginSvSel','loginSvBtn')"><span>Q&amp;T SV</span><small>follows the QT team</small></div></div></div></div>
       </div>
       <div class="lg-field" id="loginNameWrap" hidden>
         <label class="lg-label" for="loginNameInput">Full name</label>
@@ -1916,6 +1934,10 @@ function getLoggedInEmail(){
 let _loginStep='email',_loginBusy=false;
 
 /* ---- right-hand verification panel: 3 steps (Credentials → Security Check → Authentication) ---- */
+function lgDdToggle(id){const d=document.getElementById(id),o=!d.classList.contains('open');document.querySelectorAll('.lg-dd.open').forEach(x=>x.classList.remove('open'));if(o)d.classList.add('open');}
+function lgDdPick(el,hid,btn){const dd=el.closest('.lg-dd'),b=document.getElementById(btn),h=document.getElementById(hid);h.value=el.dataset.v;const sp=b.querySelector('span');sp.textContent=el.dataset.v;sp.classList.remove('ph');b.classList.remove('err');dd.querySelectorAll('.lg-dd-opt').forEach(x=>x.classList.toggle('on',x===el));dd.classList.remove('open');if(hid==='loginRoleSel')lgRoleChg();}
+document.addEventListener('click',e=>{if(!e.target.closest('.lg-dd'))document.querySelectorAll('.lg-dd.open').forEach(x=>x.classList.remove('open'));});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.lg-dd.open').forEach(x=>x.classList.remove('open'));});
 function lgRoleChg(){const r=document.getElementById('loginRoleSel').value;document.getElementById('loginSvWrap').hidden=r!=='SV';}
 function lgIdleMsg(step){return step==='setup'?'Create your password':(step==='login'?'Enter your password':(step==='signup'?'Request access':(step==='forgot'?'Reset your password':'Awaiting credentials')));}
 function lgSteps(done,run,msg){
@@ -2005,8 +2027,9 @@ async function attemptLogin(){
       const nm=(nIn.value||'').trim(),pass=pIn.value;
       if(isSignup){
         if(nm.length<2)return fail('Please enter your full name',nIn);
-        var roleV=document.getElementById('loginRoleSel').value;if(roleV==='SV')roleV=document.getElementById('loginSvSel').value;
-        if(!roleV)return fail('Please choose your role',document.getElementById('loginRoleSel'));
+        var roleV=document.getElementById('loginRoleSel').value;
+        if(!roleV)return fail('Please choose your role',document.getElementById('loginRoleBtn'));
+        if(roleV==='SV'){roleV=document.getElementById('loginSvSel').value;if(!roleV)return fail('Please choose Floor SV or Q&T SV',document.getElementById('loginSvBtn'));}
         if(!pass)return fail('Please choose a password',pIn);
         if(pass.length<8)return fail('Password must be at least 8 characters',pIn);
         if(pass!==p2In.value)return fail('Passwords do not match',p2In);
@@ -5873,6 +5896,14 @@ function anPick(k,el,single){const v=el.dataset.v;
   const S=anF[k];S.has(v)?S.delete(v):S.add(v);el.classList.toggle('on',S.has(v));el.querySelector('.dp-cb').textContent=S.has(v)?'✓':'';anDirty=true;}
 function anSrch(k,q){q=q.toLowerCase();document.querySelectorAll('#andp_'+k+' .dp-item').forEach(x=>x.style.display=x.dataset.v.toLowerCase().includes(q)?'':'none');}
 function anClear(k,single){if(single)anF[k]='';else anF[k].clear();anDone();}
+/* dropdown counts follow the OTHER active filters, so the number next to a name is exactly what you get when you pick it (a picked value stays listed even at 0) */
+function anCountX(all,key,fn){
+  const multi=anF[key] instanceof Set,sv=anF[key];anF[key]=multi?new Set():'';
+  let r;try{r=anCount(anFiltered(all),fn);}finally{anF[key]=sv;}
+  (multi?[...sv]:(sv?[sv]:[])).forEach(v=>{if(!r.some(o=>o.v===v))r.push({v,n:0});});
+  return r.sort((a,b)=>a.v<b.v?-1:1);
+}
+function anClearAll(){anF.lab=new Set();anF.qc=new Set();anF.type=new Set();anF.pass=new Set();anF.shift='';anF.status='';anF.q='';anF.mine=false;anF.from=anF.to='';anLimit=100;_anFresh=true;renderAnalysis(document.getElementById('mainContent'));}
 function anDone(){anLimit=100;_anFresh=true;anOpen='';anDirty=false;renderAnalysis(document.getElementById('mainContent'));}
 document.addEventListener('click',e=>{if(anOpen&&!(e.target.closest&&e.target.closest('.an-fg'))){if(anDirty)anDone();else{anOpen='';document.querySelectorAll('.an-fg .dpanel').forEach(p=>p.classList.remove('open'));}}});
 
@@ -5944,7 +5975,7 @@ function renderAnalysis(mc){
   if(_al&&_alSt>0){const lt=_al.getBoundingClientRect().top;for(const r of _al.children){const b=r.getBoundingClientRect();if(b.bottom>lt){_anc={id:r.dataset.id,off:b.top-lt};break;}}}
   if(anView==='tasks'){
     const shown=tasks.sort((a,b)=>b.time-a.time).slice(0,anLimit);_anList=tasks;meta=tasks.length+' tasks';
-    body=`<div class="an-bar">${anRange()}${anDD('lab','👤 Labeler',anCount(all,t=>t.lab))}${anDD('qc','🏷 QTC',anCount(all,t=>t.qc))}${anDD('type','Type',anCount(all,t=>t.type))}${anDD('pass','✅ Pass',anCount(all,t=>t.pass))}${anDD('status','Status',['Not analyzed','Analyzed','Has issue'].map(v=>({v})),true)}<input placeholder="Task id / name…" value="${esc(anF.q)}" onchange="anSet('q',this.value)"><button class="preset${anF.mine?' on':''}" onclick="anSet('mine',!anF.mine)">👤 My tasks</button><button id="anSaveAll" class="an-saveall" title="Save all (Ctrl+S)" type="button" disabled onclick="anSaveAll()">💾 Save all</button></div>
+    body=`<div class="an-bar">${anRange()}${anDD('lab','👤 Labeler',anCountX(all,'lab',t=>t.lab))}${anDD('qc','🏷 QTC',anCountX(all,'qc',t=>t.qc))}${anDD('type','Type',anCountX(all,'type',t=>t.type))}${anDD('pass','✅ Pass',anCountX(all,'pass',t=>t.pass))+anDD('shift','🕒 Shift',anCountX(all,'shift',t=>t.shift),true)}${anDD('status','Status',['Not analyzed','Analyzed','Has issue'].map(v=>({v})),true)}<input placeholder="Task id / name…" value="${esc(anF.q)}" onchange="anSet('q',this.value)"><button class="preset${anF.mine?' on':''}" onclick="anSet('mine',!anF.mine)">👤 My tasks</button>${(anF.lab.size||anF.qc.size||anF.type.size||anF.pass.size||anF.shift||anF.status||anF.q||anF.mine||anF.from||anF.to)?'<button class="preset" onclick="anClearAll()">✕ Clear all</button>':''}<button id="anSaveAll" class="an-saveall" title="Save all (Ctrl+S)" type="button" disabled onclick="anSaveAll()">💾 Save all</button></div>
       <div class="an-list">`+
       shown.map(anRow).join('')+'</div>'+(tasks.length>anLimit?'<button class="an-more" type="button" onclick="anMore()">Load more ('+(tasks.length-anLimit)+' left)</button>':'');
   }else if(anView==='ratings'){
