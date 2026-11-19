@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>METI Productivity</title>
-<meta name="app-version" content="23"/>
+<meta name="app-version" content="25"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://docs.google.com https://script.google.com https://*.googleusercontent.com https://sheets.googleapis.com; worker-src blob:; object-src 'none'; base-uri 'none'; form-action 'none'"/>
 <meta name="referrer" content="no-referrer"/>
 <script id="lite-guard">
@@ -28,7 +28,10 @@
 <script>
 /* ===== central settings: change IDs / URLs / intervals here only ===== */
 window.MEEG_CONFIG={
-  SHEET_ID:'1g9mPKQMactJKC-BP0Ik3Cw72PLUXCb4VTKFbHYLjc5I',
+  SHEET_ID:'1g9mPKQMactJKC-BP0Ik3Cw72PLUXCb4VTKFbHYLjc5I',   /* the OLD workbook: still holds Users / Teams / Export tabs */
+  DATA_SHEET_ID:'1UUz2m5wR-L3QEEPxGVj-YXjM3ctQK_XWaqkGg7CdMtc',   /* the SOURCE workbook: the "Data Base" tab is read straight from here (no IMPORTRANGE any more) */
+  DATA_SHEET_NAME:'Data Base',   /* tab name inside DATA_SHEET_ID */
+  DATA_SHEET_GID:'0',            /* the number after gid= in that tab's URL */
   ARCHIVE_SHEET_ID:'1BSeiRLiRTSmH_Et0B8TQAPKsuY98CVSB-gcg6ai51YQ',
   /* EXTRA archive spreadsheets (searched together with the main one). Each: id = the code between /d/ and /edit, tabs = [{name, gid}] (gid = the number after "gid=" in the tab's URL).
      Must be shared "anyone with the link can view". To add another tab of the same file, add another {name,gid}. */
@@ -37,9 +40,9 @@ window.MEEG_CONFIG={
     {id:'1vpsYtvoZSKLsUeKj-FTXVGJmyFygSSck8DUIODJha_A',tabs:[{name:'Backup Date Base',gid:0}]}   /* the Backup sheet: archive only (it is no longer merged into the dashboard) */
   ],
   AUTH_API_URL:'https://script.google.com/macros/s/AKfycbw5-s6OKJLkFXgl3m2O3gboJNfy_o_ijt36c3CyBuGVW79Q2FUXUeMxC8OgZUbCkXUMSA/exec',
-  MAIN_PUB_CSV:'https://docs.google.com/spreadsheets/d/e/2PACX-1vSUx9cKWSGi-PlaTBgj-NsqhUKrWkFhBpxVDqgCjhIIQSlCJMXT1ISzERTOYbNHCKGqXjKjzi-zLk1y/pub?gid=0&single=true&output=csv',          /* PASTE HERE the "Publish to web" CSV link of the Data Base tab (File > Share > Publish to web > pick the tab > CSV). Google serves it from its cache, so 30 people refreshing every minute no longer get throttled. Empty = old direct export. */
+  MAIN_PUB_CSV:'',          /* PASTE HERE the "Publish to web" CSV link of the Data Base tab (File > Share > Publish to web > pick the tab > CSV). Google serves it from its cache, so 30 people refreshing every minute no longer get throttled. Empty = old direct export. */
   SHEETS_API_KEY:'AIzaSyDxj-kIRhx2za1YcwDkrrmfot-DWcuwuLo',        /* PASTE HERE a Google Sheets API key (see steps). Empty = the old refresh method is used. */
-  DELTA_URL:'https://script.google.com/macros/s/AKfycbwJe-HVXzBl6xA7vgSXEBKH7hYzwbGWucMjwcSMOfO0X4ymP9Fzi6FI0xpM9MnW9NCxPA/exec',   /* Apps Script delta endpoint (delta_script.gs v2, reads through the Sheets Advanced Service). Used when SHEETS_API_KEY is empty. Empty = old refresh method. */
+  DELTA_URL:'https://script.google.com/macros/s/AKfycbz-Qy_vuHVBShAok4Ud1LWqdypryuf345RSkE2-AszoeA7YdjabCMGbVXyzrch8dO5f_g/exec',   /* Apps Script delta endpoint (delta_script.gs v2, reads through the Sheets Advanced Service). Used when SHEETS_API_KEY is empty. Empty = old refresh method. */
   REFRESH_INTERVAL:60,      /* seconds between auto data refreshes */
   USERS_WATCH_MS:120000,    /* access re-check (was 30s: every open dashboard hit the login script twice a minute and kept it busy) */
   QUALITY_POLL_MS:30000,    /* Export tab check */
@@ -2278,8 +2281,9 @@ function barRows(mapA,mapB,cA,cB){const keys=[...new Set([...Object.keys(mapA),.
 const old=document.getElementById('cmpResultSection');if(old)old.remove();const sec=document.createElement('div');sec.id='cmpResultSection';sec.className='cmp-result';
 sec.innerHTML=`<div class="cmp-result-hd"><div class="cmp-result-title">⚖️ Comparison Result <span class="cmp-label cmp-label-a">A: ${esc(lblA)}</span><span style="color:var(--muted);font-size:.65rem">vs</span><span class="cmp-label cmp-label-b">B: ${esc(lblB)}</span></div><button class="btn btn-d" style="padding:3px 8px;font-size:.58rem" onclick="document.getElementById('cmpResultSection').remove()">✕ Close</button></div><div class="cmp-cols"><div class="cmp-col cmp-col-a"><div class="cmp-col-hd cmp-col-hd-a">A — ${esc(lblA)}</div><div class="cmp-stat-row"><span class="cmp-stat-label">Total Submits</span><span class="cmp-stat-val" data-anim-num="${sA.total}">${sA.total}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Total Objects</span><span class="cmp-stat-val" data-anim-num="${sA.totalObj}">${sA.totalObj.toLocaleString()}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top Labeler</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sA.topLab)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top QTC</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sA.topQtc)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top Modality</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sA.topMod)}</span></div></div><div class="cmp-col"><div class="cmp-col-hd cmp-col-hd-b">B — ${esc(lblB)}</div><div class="cmp-stat-row"><span class="cmp-stat-label">Total Submits</span><span class="cmp-stat-val">${sB.total} ${deltaHtml(sB.total,sA.total)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Total Objects</span><span class="cmp-stat-val">${sB.totalObj.toLocaleString()} ${deltaHtml(sB.totalObj,sA.totalObj)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top Labeler</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sB.topLab)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top QTC</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sB.topQtc)}</span></div><div class="cmp-stat-row"><span class="cmp-stat-label">Top Modality</span><span class="cmp-stat-val" style="font-size:.62rem;font-family:var(--font)">${esc(sB.topMod)}</span></div></div></div>${Object.keys(sA.labMap).length||Object.keys(sB.labMap).length?`<div style="padding:12px 16px;border-top:1px solid var(--border)"><div style="font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">👤 Labeler Comparison</div>${barRows(sA.labMap,sB.labMap,'var(--cmp-a)','var(--cmp-b)')}<div style="display:flex;gap:12px;margin-top:6px;font-size:.58rem"><span style="color:var(--cmp-a)">■ A: ${esc(lblA)}</span><span style="color:var(--cmp-b)">■ B: ${esc(lblB)}</span></div></div>`:''}${Object.keys(sA.modMap).length||Object.keys(sB.modMap).length?`<div style="padding:12px 16px;border-top:1px solid var(--border)"><div style="font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🔬 Modality Comparison</div>${barRows(sA.modMap,sB.modMap,'var(--cmp-a)','var(--cmp-b)')}</div>`:''}${Object.keys(sA.qMap).length||Object.keys(sB.qMap).length?`<div style="padding:12px 16px;border-top:1px solid var(--border)"><div style="font-size:.62rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📋 Queue Comparison</div>${barRows(sA.qMap,sB.qMap,'var(--cmp-a)','var(--cmp-b)')}</div>`:''}`;
 const content=document.getElementById('mainContent');content.insertBefore(sec,content.firstChild);setTimeout(animateAllNums,100);sec.scrollIntoView({behavior:'smooth',block:'start'});showToast('✅ Comparison ready!');}
-const SHEET_ID=MEEG_CONFIG.SHEET_ID;
-const SHEET_NAME='Data Base';
+const SHEET_ID=MEEG_CONFIG.SHEET_ID;   // old workbook: Users / Teams / Export / Analysis fallback
+const DATA_SHEET_ID=MEEG_CONFIG.DATA_SHEET_ID||MEEG_CONFIG.SHEET_ID;   // workbook that holds the Data Base tab
+const SHEET_NAME=MEEG_CONFIG.DATA_SHEET_NAME||'Data Base';
 const REFRESH_INTERVAL=MEEG_CONFIG.REFRESH_INTERVAL;
 const ALL_SHIFTS=["over night","over night 12 h","morning 12 h","night","morning","over shift (m)","over shift (n)","over shift (on)"];
 const PGSZ=75;
@@ -2441,7 +2445,7 @@ function idbOpen(){return new Promise((res,rej)=>{try{const r=indexedDB.open(IDB
 function idbGet(k){return idbOpen().then(db=>new Promise((res,rej)=>{const q=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);})).catch(()=>undefined);}
 function idbSet(k,v){return idbOpen().then(db=>new Promise((res,rej)=>{const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k);q.onsuccess=()=>res(true);q.onerror=()=>rej(q.error);})).catch(()=>false);}
 function idbClear(){return idbOpen().then(db=>new Promise(res=>{const q=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).clear();q.onsuccess=q.onerror=()=>res(true);})).catch(()=>false);}
-const SHEET_GID='0'; // gid of the "Data Base" tab — change this if you add/reorder sheet tabs
+const SHEET_GID=String(MEEG_CONFIG.DATA_SHEET_GID||'0'); // gid of the "Data Base" tab inside DATA_SHEET_ID (set in MEEG_CONFIG at the top)
 
 /* ============ QUALITY TAB (Export sheet import) ============ */
 const EXPORT_SHEET_NAME='Export'; // the tab name where you paste the quality data inside the same Google Sheet
@@ -3600,7 +3604,7 @@ let _cacheTried=false;
 function _fetchMainText(){
   const AUTO=!!window._autoRun;window._autoRun=false;   /* background run: 25s time-out and 2 tries instead of 40s and 3 */
   const pub=String((window.MEEG_CONFIG&&MEEG_CONFIG.MAIN_PUB_CSV)||'').trim();
-  const exp=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+  const exp=`https://docs.google.com/spreadsheets/d/${DATA_SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
   /* two sources: Google's published (cached) copy first, the direct export as the backup — every retry switches source */
   const srcs=pub?[{u:pub,cb:false},{u:exp,cb:true}]:[{u:exp,cb:true}];
   const once=n=>{
@@ -3680,7 +3684,7 @@ function _incSetBase(txt,table){
 }
 function _incEligible(){const n=Date.now();return !!(_incText&&_incKI&&_incN>1&&!BACKUP_SHEET_ID&&rawRows.length>0&&n>=_incOffUntil&&n-_incFullTs<_INC_FULL&&navigator.onLine!==false);}
 function _incFetch(){
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}&range=A${_incN}:${_colL(_incCols)}&_cb=${Date.now()}`;
+  const url=`https://docs.google.com/spreadsheets/d/${DATA_SHEET_ID}/export?format=csv&gid=${SHEET_GID}&range=A${_incN}:${_colL(_incCols)}&_cb=${Date.now()}`;
   return _fetchText(url,20000,60000,15000).then(async t=>{
     if(/^\s*<(!doctype|html)/i.test(t))throw new Error('range export returned a web page');
     if(t.length>2097152)return null;                               /* Google ignored the range and sent a big file → not a valid answer */
@@ -3708,7 +3712,7 @@ function _deltaOne(useScript){
   if(_deltaKey()&&!useScript){
     /* Google Sheets API: reads ONLY the range A<last held row>:<last column> straight from the sheet (first row = overlap check) */
     const rng=encodeURIComponent("'"+SHEET_NAME+"'!A"+_incN+":"+_colL(_incCols));
-    const url='https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+rng+'?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&key='+encodeURIComponent(_deltaKey());
+    const url='https://sheets.googleapis.com/v4/spreadsheets/'+DATA_SHEET_ID+'/values/'+rng+'?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE&key='+encodeURIComponent(_deltaKey());
     p=fetch(url,{cache:'no-store',signal:ctl.signal}).then(async r=>{
       if(!r.ok){let m='';try{m=((await r.json()).error||{}).message||'';}catch(e){}throw new Error('Sheets API '+r.status+(m?': '+m:''));}
       return r.json();
@@ -3957,7 +3961,10 @@ function fixTsDMY(row,ti,ci){
   row[ti]=y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0')+m[4];window._tsFixed=(window._tsFixed||0)+1;
 }
 function onCsvTable(table){
-  if(!table.length){showErr('No data returned.');return;}hdrs=table[0].map(h=>String(h||'').trim());const hLower=hdrs.map(h=>h.toLowerCase());sIdx={};["Shift","Unit","Qtc Name","Yubikey Email","Labeler Name","Pc No","Modality","Queue Name","Location","Pass"].forEach(name=>{const i=hLower.indexOf(name.toLowerCase());if(i>=0)sIdx[name]=i;});tsIdx=hLower.findIndex(h=>h==='timestamp');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='created at');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='date');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h.includes('date'));locColIdx=hLower.findIndex(h=>h==='location');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='unit');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='site');rawRows=[];window._tsFixed=0;const caIdx=hLower.indexOf('created at');const skippedShift={};for(let ri=1;ri<table.length;ri++){const rowRaw=table[ri];if(!rowRaw||!rowRaw.length)continue;table[ri]=null;const row=rowRaw;for(let ci=0;ci<hdrs.length;ci++){const v=row[ci];row[ci]=v===undefined?'':String(v).trim();}row.length=hdrs.length;if(row.every(c=>c===''))continue;const sci=sIdx['Shift'];if(sci!==undefined){const sv=String(row[sci]||'').replace(/\s+/g,' ').trim().toLowerCase();if(!ALL_SHIFTS.some(a=>sv===a)){const kk=sv||'(empty)';skippedShift[kk]=(skippedShift[kk]||0)+1;continue;}}fixTsDMY(row,tsIdx,caIdx);normRow(row);rawRows.push(row);}window._skippedShift=skippedShift;{const ks=Object.keys(skippedShift),tot=ks.reduce((a,k)=>a+skippedShift[k],0);if(tot>0){console.warn('Rows skipped (unknown Shift value):',skippedShift);const sig=JSON.stringify(skippedShift);if(window._skipSig!==sig){window._skipSig=sig;showToast('⚠️ '+tot+' row(s) skipped — unknown Shift: '+ks.slice(0,4).map(k=>'"'+k+'" ×'+skippedShift[k]).join(', ')+(ks.length>4?' …':''));}}}
+  if(!table.length){showErr('No data returned.');return;}hdrs=table[0].map(h=>String(h||'').trim());
+  /* SOURCE sheet has BOTH "Task ID" (numeric) and "Id" (UUID). The dashboard works with the numeric one named "Id" → rename it, and hide the UUID column (header '—' = not shown) */
+  {const _l=hdrs.map(h=>h.toLowerCase()),_t=_l.indexOf('task id');if(_t>=0){const _u=_l.indexOf('id');if(_u>=0&&_u!==_t)hdrs[_u]='—';hdrs[_t]='Id';}}
+  const hLower=hdrs.map(h=>h.toLowerCase());sIdx={};["Shift","Unit","Qtc Name","Yubikey Email","Labeler Name","Pc No","Modality","Queue Name","Location","Pass"].forEach(name=>{const i=hLower.indexOf(name.toLowerCase());if(i>=0)sIdx[name]=i;});tsIdx=hLower.findIndex(h=>h==='timestamp');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='created at');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h==='date');if(tsIdx<0)tsIdx=hLower.findIndex(h=>h.includes('date'));locColIdx=hLower.findIndex(h=>h==='location');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='unit');if(locColIdx<0)locColIdx=hLower.findIndex(h=>h==='site');rawRows=[];window._tsFixed=0;const caIdx=hLower.indexOf('created at');const skippedShift={};for(let ri=1;ri<table.length;ri++){const rowRaw=table[ri];if(!rowRaw||!rowRaw.length)continue;table[ri]=null;const row=rowRaw;for(let ci=0;ci<hdrs.length;ci++){const v=row[ci];row[ci]=v===undefined?'':String(v).trim();}row.length=hdrs.length;if(row.every(c=>c===''))continue;const sci=sIdx['Shift'];if(sci!==undefined){const sv=String(row[sci]||'').replace(/\s+/g,' ').trim().toLowerCase();if(!ALL_SHIFTS.some(a=>sv===a)){const kk=sv||'(empty)';skippedShift[kk]=(skippedShift[kk]||0)+1;continue;}}fixTsDMY(row,tsIdx,caIdx);normRow(row);rawRows.push(row);}window._skippedShift=skippedShift;{const ks=Object.keys(skippedShift),tot=ks.reduce((a,k)=>a+skippedShift[k],0);if(tot>0){console.warn('Rows skipped (unknown Shift value):',skippedShift);const sig=JSON.stringify(skippedShift);if(window._skipSig!==sig){window._skipSig=sig;showToast('⚠️ '+tot+' row(s) skipped — unknown Shift: '+ks.slice(0,4).map(k=>'"'+k+'" ×'+skippedShift[k]).join(', ')+(ks.length>4?' …':''));}}}
 sOpts={};["Shift","Unit","Qtc Name","Yubikey Email","Labeler Name","Pc No","Modality","Queue Name","Location","Pass"].forEach(name=>{const ci=sIdx[name];if(ci===undefined)return;const set=new Set();rawRows.forEach(r=>{const v=String(r[ci]||'').trim();if(v)set.add(v);});sOpts[name]=[...set].sort();});const dateSet=new Set();rawRows.forEach(r=>{const d=extractDate(r[tsIdx]);if(d)dateSet.add(d);});sOpts['_dates']=[...dateSet].sort().reverse();const locSet=new Set();if(locColIdx>=0)rawRows.forEach(r=>{const v=String(r[locColIdx]||'').trim();if(v)locSet.add(v);});locations=[...locSet].sort();todayStr=cairoToday();document.getElementById('todayLabel').textContent=todayStr;lastUpdateTs=window._cacheTs||Date.now();window._cacheTs=null;updateRelativeTime();setTrafficLight('green');window._firstDataReady=true;document.getElementById('totalBadge').textContent=rawRows.length+' rows';SC.forEach(s=>{if(!sel[s.key])sel[s.key]=new Set();});if(!_filtersRestored){restoreFilters();_filtersRestored=true;}buildStrip();buildTabs();applyAll();if(autoRefreshEnabled&&!_nextAutoAt)_armAuto();applyAutoRefreshUI();if(cmpMode)populateCmpSelects();try{loadArchiveIds();}catch(e){}
 }
 const _MONTH_NAMES={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
