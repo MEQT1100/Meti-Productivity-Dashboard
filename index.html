@@ -2594,6 +2594,7 @@ function computeUnresolvedQualityIds(){
   if(idIdx>=0)rawRows.forEach(r=>{const rid=String(r[idIdx]||'').trim();if(rid)dbIds.add(rid);});
   const out=new Set();
   Object.keys(qualityStore||{}).forEach(id=>{if(!dbIds.has(id))out.add(id);});
+  Object.values(qualityStore||{}).forEach(q=>{const e=q&&q.expId;if(e&&!dbIds.has(e))out.add(e);});   // the Expected task's ID too — its submitter's email comes from Data Base, or from the Archive when it is no longer there
   return out;
 }
 // downloads ONE archive tab (by gid when known — survives renames — otherwise by name). Retries up to 3 times (Google
@@ -3051,6 +3052,9 @@ function fetchQualityData(silent){
     const gulpIdx=(()=>{let i=qhLower.findIndex(h=>h==='gulp diff url');if(i<0)i=qhLower.findIndex(h=>h.indexOf('gulp')>=0&&h.indexOf('url')>=0);if(i<0)i=qhLower.findIndex(h=>h.indexOf('gulp')>=0);return i;})();
     const actDateIdx=qhLower.findIndex(h=>h==='actual date');
     const expDateIdx=qhLower.findIndex(h=>h==='expected date');
+    // who submitted the EXPECTED task: its ID column (looked up in Data Base / Archive) and, if the sheet has it, a ready Expected Email column
+    const expIdIdx=(()=>{let i=qhLower.findIndex(h=>/^expected\s*(task\s*)?id$/.test(h));if(i<0)i=qhLower.findIndex(h=>h==='expected');return i;})();
+    const expEmailIdx=qhLower.findIndex(h=>/^expected\s*(yubikey\s*)?email$/.test(h));
     const newWeek=qIsNewWeek(table,aidIdx,adateIdx,qualityStore);
     if(newWeek)qualityStore={};   // newer week in Export -> start clean, exactly like pressing Reset (New Week)
     const now=Date.now();let added=0;
@@ -3065,6 +3069,8 @@ function fetchQualityData(silent){
       rec.gulpUrl=gulpIdx>=0&&row[gulpIdx]!==undefined?String(row[gulpIdx]).trim():'';
       rec.actDate=actDateIdx>=0&&row[actDateIdx]!==undefined?String(row[actDateIdx]).trim():'';
       rec.expDate=expDateIdx>=0&&row[expDateIdx]!==undefined?String(row[expDateIdx]).trim():'';
+      rec.expId=expIdIdx>=0&&row[expIdIdx]!==undefined?String(row[expIdIdx]).trim():'';
+      rec.expEmail=expEmailIdx>=0&&row[expEmailIdx]!==undefined?String(row[expEmailIdx]).trim():'';
       qualityStore[aid]=rec;added++;
     }
     saveQualityStore();
@@ -3233,7 +3239,7 @@ function renderQualitySection(mc){
   window._qualityIdInfo=idInfo;
   // for an Unmatched task (Actual ID not found), fall back to whichever shift its Yubikey Email shows up under
   // most often across all of Data Base
-  const emailInfo=computeEmailShiftInfo();
+  const emailInfo=computeEmailShiftInfo();window._qEmailInfo=emailInfo;
   const buckets={Morning:{},Night:{},Overnight:{},Empty:{}};
   window._qExport={rows:[],totShift:[],totWf:null,week:''};   // filled while rendering; used by Export on the Quality tab
   const teamAgg={};let teamSkipped=0;
@@ -3537,11 +3543,15 @@ function filterQualityById(val){
   if(!resEl)return;
   if(!q){resEl.innerHTML='';if(cntEl)cntEl.textContent='—';return;}
   const idInfo=window._qualityIdInfo||computeQualityIdInfo();
+  const emailMap=window._qEmailInfo||(window._qEmailInfo=computeEmailShiftInfo());
   // match the task ID, OR the Yubikey Email (from the Export tab or from Data Base/Archive), OR the labeler name
   const all=Object.entries(qualityStore).filter(([aid,qd])=>{
     if(aid.toLowerCase().includes(q))return true;
     const info=idInfo[aid];
     if(String(qd.email||'').toLowerCase().includes(q))return true;
+    if(String(qd.expEmail||'').toLowerCase().includes(q)||String(qd.expId||'').toLowerCase().includes(q))return true;
+    const ex=(qd.expId?idInfo[qd.expId]:null)||(qd.expEmail?emailMap[String(qd.expEmail).trim().toLowerCase()]:null);
+    if(ex&&(String(ex.email||'').toLowerCase().includes(q)||String(ex.name||'').toLowerCase().includes(q)))return true;
     if(info&&(String(info.email||'').toLowerCase().includes(q)||String(info.name||'').toLowerCase().includes(q)))return true;
     return false;
   });
@@ -3556,7 +3566,22 @@ function filterQualityById(val){
     const qtc=info?info.qtc:'';
     const link=qd.gulpUrl||(info?info.link:'');
     const col=grp?SHIFT_GROUP_COLORS[grp]:'var(--danger)';
-    return `<div class="dcard" style="cursor:var(--cur-arrow,default);border-color:${col}55;background:${col}0d">
+    /* Expected Email comes straight from the Export tab; "-" there means the Expected task was done by another vendor.
+       Who that person is: looked up by email in Data Base (or by the Expected ID, Data Base / Archive, when the sheet has one) */
+    const exRaw=String(qd.expEmail||'').trim();
+    const exVendor=/^[-\u2013\u2014]+$/.test(exRaw);
+    const exInfo=qd.expId?idInfo[qd.expId]:null;
+    const exEmail=exVendor?'':(exRaw||(exInfo&&exInfo.email)||'');
+    const exByMail=exEmail?emailMap[exEmail.toLowerCase()]:null;
+    const exNm=(exInfo&&exInfo.name)||(exByMail&&exByMail.name)||'';
+    const exName=exNm&&exNm!==exEmail&&exNm!==qd.expId?exNm:'';
+    const exSrc=exInfo&&exInfo.src==='archive'?' \u00b7 Archive':'';
+    const exBlock=exVendor
+      ?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt">Expected Email: Another Vendor</span></div>`
+      :(exEmail||exName)
+        ?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt">Expected Email: ${esc(exEmail||'\u2014')}</span></div>${exName?`<div class="dc-meta"><span class="dc-mi">\ud83e\uddd1\u200d\ud83d\udcbb</span><span class="dc-mt">Expected by: ${esc(exName)}${esc(exSrc)}</span></div>`:''}`
+        :(qd.expId?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt" style="color:var(--muted)">Expected Email: not found (ID ${esc(qd.expId)})</span></div>`:'');
+    return `<div class="dcard" data-aid="${esc(aid)}" role="button" tabindex="0" title="Click for details" onclick="openQualityTaskCard(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openQualityTaskCard(this)}" style="cursor:pointer;border-color:${col}55;background:${col}0d">
       <div class="dc-top"><span class="dc-pc" style="color:${col}">🆔 ${esc(aid)}</span></div>
       ${person?`<div class="dc-meta"><span class="dc-mi">👤</span><span class="dc-mt">${esc(person)}</span></div>${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}${qtc?`<div class="dc-meta"><span class="dc-mi">🏷️</span><span class="dc-mt">${esc(qtc)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">${grp?SHIFT_GROUP_ICON[grp]:''}</span><span class="dc-mt">${esc(grp||'—')} Shift</span></div>`:`${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">🚫</span><span class="dc-mt">Unmatched</span></div>`}
       <div class="dc-meta"><span class="dc-mi">🧩</span><span class="dc-mt">Artifacts: ${qFmt(qNum(qd.artifacts))}</span></div>
@@ -3564,6 +3589,7 @@ function filterQualityById(val){
       <div class="dc-meta"><span class="dc-mi">📐</span><span class="dc-mt">TVA F1: ${qFmt(qNum(qd.tvaF1))}</span></div>
       ${qd.actDate?`<div class="dc-meta"><span class="dc-mi">📅</span><span class="dc-mt">Actual: ${esc(qd.actDate)}</span></div>`:''}
       ${qd.expDate?`<div class="dc-meta"><span class="dc-mi">📅</span><span class="dc-mt">Expected: ${esc(qd.expDate)}</span></div>`:''}
+      ${exBlock}
       ${link?`<div class="dc-meta"><span class="dc-mi">🔗</span><span class="dc-mt">${qLinkBtn(link)}</span></div>`:''}
       <div class="dc-qs"><span class="qtag" style="background:${col}22;color:${col};border-color:${col}55;font-weight:800">🎯 Total: ${qFmt(qNum(qd.totalAccuracy))}</span></div>
     </div>`;
@@ -5142,9 +5168,10 @@ window.openQualityPerson=function(tr){
  const grp=tr.dataset.grp,P=PAL[th()],cols=[P.blue,P.teal,P.indigo,P.orange,P.green],name=b.display||'';
  let hsh=0;for(const ch of name)hsh=(hsh*31+ch.charCodeAt(0))>>>0;
  const tasks=(b.tasks||[]).slice().sort((x,y)=>{const a=qNum(x.q.totalAccuracy),c=qNum(y.q.totalAccuracy);return(a===null?101:a)-(c===null?101:c)});
+ {const fa=window._qFocusAid;window._qFocusAid=null;if(fa){const fi=tasks.findIndex(t=>t.aid===fa);if(fi>0)tasks.unshift(tasks.splice(fi,1)[0]);window._qFocusId=fa;}else window._qFocusId=null;}
  const avg=m=>b.cnt[m]?b.sum[m]/b.cnt[m]:null;
  G('pnAv').textContent=name.split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();G('pnAv').style.background=cols[hsh%5];
- G('pnName').textContent=name;G('pnSub').textContent='Labeler \u00b7 '+(grp==='Empty'?'Empty':grp+' Shift')+(b.email?' \u00b7 '+b.email:'');
+ G('pnName').textContent=name;G('pnSub').textContent='Labeler \u00b7 '+(grp==='Empty'||grp==='Unmatched'?grp:grp+' Shift')+(b.email?' \u00b7 '+b.email:'');
  G('pnV').textContent=tasks.length;G('pnVl').textContent='Tasks';G('pnD').textContent=qFmt(avg('totalAccuracy'));G('pnDl').textContent='Total Accuracy';
  document.querySelector('#pn .pn-card').style.display='none';
  const mets=[['Artifacts',avg('artifacts')],['Attribute',avg('attribute')],['TVA F1',avg('tvaF1')],['Total Accuracy',avg('totalAccuracy')]].filter(x=>x[1]!==null);
@@ -5152,8 +5179,8 @@ window.openQualityPerson=function(tr){
  const row=(k,v)=>v?'<div class="qpt-r"><span>'+k+'</span><em>'+v+'</em></div>':'';
  const list='<div class="pn-h">Tasks with quality ('+tasks.length+') <span class="qpt-hint">lowest first</span></div>'+tasks.map(t=>{
   const tier=accTier(qNum(t.q.totalAccuracy)),url=safeUrl(String(t.q.gulpUrl||t.link||'').trim()),ok=!!url;
-  return '<div class="qpt"><div class="qpt-t"><b>'+esc(t.aid)+'</b><span style="color:'+tier.c+';background:'+tier.bg+';border:1px solid '+tier.bd+'">'+qFmt(qNum(t.q.totalAccuracy))+'</span></div>'
-  +row('Sent to (QTC)',t.qtc?esc(t.qtc):'')+row('Actual Date',esc(t.q.actDate||''))+row('Expected Date',esc(t.q.expDate||''))
+  return '<div class="qpt"'+(window._qFocusId&&t.aid===window._qFocusId?' style="box-shadow:0 0 0 1.5px var(--primary)"':'')+'><div class="qpt-t"><b>'+esc(t.aid)+'</b><span style="color:'+tier.c+';background:'+tier.bg+';border:1px solid '+tier.bd+'">'+qFmt(qNum(t.q.totalAccuracy))+'</span></div>'
+  +row('Sent to (QTC)',t.qtc?esc(t.qtc):'')+row('Actual Date',esc(t.q.actDate||''))+row('Expected Date',esc(t.q.expDate||''))+row('Expected Email',window.qExpectedText?window.qExpectedText(t.q):'')
   +'<div class="qpt-r"><span>Artifacts \u00b7 Attr \u00b7 TVA</span><em>'+qFmt(qNum(t.q.artifacts))+' \u00b7 '+qFmt(qNum(t.q.attribute))+' \u00b7 '+qFmt(qNum(t.q.tvaF1))+'</em></div>'
   +'<div class="qpt-r"><span>GULP Diff URL</span>'+(ok?'<a href="'+esc(url)+'" target="_blank" rel="noopener">Open \u2197</a>':'<em style="color:var(--muted)">'+(url?esc(url):'no link')+'</em>')+'</div></div>';}).join('');
  G('pnBars').innerHTML=bars+list;
@@ -6075,5 +6102,72 @@ var th=document.getElementById('gdTheme'),lp;th.addEventListener('touchstart',fu
 ['touchend','touchmove','touchcancel'].forEach(function(t){th.addEventListener(t,function(){clearTimeout(lp)},{passive:true})});})();
 </script>
 
+<script id="keep-ui-state">
+/* Auto-refresh used to rebuild the whole tab, which emptied the search boxes and threw the lists back to the top.
+   Around every renderAllSections(): remember what is typed / focused / scrolled, then put it back on the new DOM. */
+(function(){
+  var _ras=window.renderAllSections;if(typeof _ras!=='function')return;
+  var _last=null;   /* the tab that is currently on screen (activeLoc already changed when a tab switch calls us) */
+  function snap(){
+    var st={loc:activeLoc,y:window.scrollY,q:null,sc:{},foc:null};
+    try{
+      /* a location-search keystroke still waiting on its 250 ms debounce is committed now, so the rebuilt table uses it */
+      Object.keys(_srchDebounce||{}).forEach(function(k){var el=document.getElementById('srch_'+sid(k));if(el&&el.value!==(locSearch[k]||'')){clearTimeout(_srchDebounce[k]);locSearch[k]=el.value;}});
+      var qi=document.getElementById('qualityIdSearch');if(qi)st.q=qi.value;
+      document.querySelectorAll('[id^="wrap_"],[id^="tbl_"],#qualityIdResult').forEach(function(el){if(el.scrollTop||el.scrollLeft)st.sc[el.id]=[el.scrollTop,el.scrollLeft];});
+      var ae=document.activeElement;
+      if(ae&&ae.id&&(ae.id==='qualityIdSearch'||ae.id.indexOf('srch_')===0))st.foc={id:ae.id,a:ae.selectionStart,b:ae.selectionEnd};
+    }catch(e){console.warn('[ui-state] snapshot',e);}
+    return st;
+  }
+  function scrolls(st){
+    Object.keys(st.sc).forEach(function(id){var el=document.getElementById(id);if(el){el.scrollTop=st.sc[id][0];el.scrollLeft=st.sc[id][1];}});
+    var d=document.documentElement,old=d.style.scrollBehavior;d.style.scrollBehavior='auto';window.scrollTo(0,st.y);d.style.scrollBehavior=old;
+  }
+  function syncLoc(){Object.keys(locSearch||{}).forEach(function(k){var v=locSearch[k];if(!v)return;var el=document.getElementById('srch_'+sid(k));if(el&&el.value!==v)el.value=v;});}
+  function restore(st){
+    if(!st||st.loc!==activeLoc)return;                  /* switched tab → fresh tab, nothing to restore */
+    try{
+      var qi=document.getElementById('qualityIdSearch');
+      if(qi&&st.q){qi.value=st.q;if(typeof filterQualityById==='function')filterQualityById(st.q);}
+      syncLoc();
+      scrolls(st);
+      if(st.foc){var f=document.getElementById(st.foc.id);if(f){f.focus({preventScroll:true});try{f.setSelectionRange(st.foc.a,st.foc.b);}catch(e){}}}
+      setTimeout(function(){if(st.loc===activeLoc)scrolls(st);},150);   /* sections that finish drawing a moment later */
+    }catch(e){console.warn('[ui-state] restore',e);}
+  }
+  window.renderAllSections=function(){
+    var st=(_last===activeLoc)?snap():null;
+    try{return _ras.apply(this,arguments);}finally{_last=activeLoc;if(st)restore(st);else{try{syncLoc();}catch(e){}}}
+  };
+})();
+</script>
+<script id="quality-card-click">
+/* Quality search results: click a card → same side panel as the labeler rows (all of that person's quality tasks, the clicked one first) */
+window.qExpectedText=function(q){
+  var raw=String(q.expEmail||'').trim();
+  if(/^[-\u2013\u2014]+$/.test(raw))return 'Another Vendor';
+  var idInfo=window._qualityIdInfo||{},em=window._qEmailInfo||{},ei=q.expId?idInfo[q.expId]:null;
+  var email=raw||(ei&&ei.email)||'';if(!email)return '';
+  var nm=(ei&&ei.name)||(em[email.toLowerCase()]&&em[email.toLowerCase()].name)||'';
+  return esc(email)+(nm&&nm!==email?' \u00b7 '+esc(nm):'');
+};
+window.openQualityTaskCard=function(el){
+  var aid=el&&el.dataset?el.dataset.aid:String(el||'');if(!aid||typeof window.openQualityPerson!=='function')return;
+  var sel=window.getSelection&&window.getSelection();if(sel&&String(sel).length)return;   /* the person is selecting text on the card, not clicking it */
+  var B=window._qBuckets||{},grp=null,key=null;
+  outer:for(var g in B){for(var k in B[g]){if((B[g][k].tasks||[]).some(function(t){return t.aid===aid;})){grp=g;key=k;break outer;}}}
+  if(!grp){   /* no shift found for it: group everything that came from the same Yubikey Email */
+    var q0=qualityStore[aid];if(!q0)return;
+    var em=String(q0.email||'').trim().toLowerCase();
+    var tasks=Object.keys(qualityStore).filter(function(id){return id===aid||(em&&String(qualityStore[id].email||'').trim().toLowerCase()===em);}).map(function(id){return{aid:id,q:qualityStore[id],qtc:'',link:''};});
+    var b={display:q0.email||aid,email:q0.email||'',count:tasks.length,tasks:tasks,sum:{},cnt:{}};
+    QUALITY_METRICS.forEach(function(m){b.sum[m]=0;b.cnt[m]=0;tasks.forEach(function(t){var n=qNum(t.q[m]);if(n!==null){b.sum[m]+=n;b.cnt[m]++;}});});
+    key=em||aid;grp='Unmatched';B.Unmatched={};B.Unmatched[key]=b;window._qBuckets=B;
+  }
+  window._qFocusAid=aid;
+  window.openQualityPerson({dataset:{grp:grp,key:key}});
+};
+</script>
 </body>
 </html>
