@@ -3219,8 +3219,9 @@ function computeEmailShiftInfo(){
     const nm=nameIdx!==undefined?String(r[nameIdx]||'').trim():'';
     const qtc=qtcIdx>=0?String(r[qtcIdx]||'').trim():'';
     const grp=qtcShiftGroup(qtc);
-    if(!info[ek])info[ek]={email:em,counts:{Morning:0,Night:0,Overnight:0},names:{}};
+    if(!info[ek])info[ek]={email:em,counts:{Morning:0,Night:0,Overnight:0},names:{},qtcs:{}};
     const e=info[ek];
+    if(qtc)e.qtcs[qtc]=(e.qtcs[qtc]||0)+1;
     if(grp)e.counts[grp]=(e.counts[grp]||0)+1;
     if(nm)e.names[nm]=(e.names[nm]||0)+1;
   });
@@ -3231,6 +3232,7 @@ function computeEmailShiftInfo(){
     let bestName=null,bestNc=-1;
     Object.entries(e.names).forEach(([n,c])=>{if(c>bestNc){bestNc=c;bestName=n;}});
     e.name=bestName||e.email;
+    let bestQ='',bestQc=0;Object.entries(e.qtcs).forEach(([n,c])=>{if(c>bestQc){bestQc=c;bestQ=n;}});e.qtc=bestQ;
   });
   return info;
 }
@@ -3576,14 +3578,16 @@ function filterQualityById(val){
     const exNm=(exInfo&&exInfo.name)||(exByMail&&exByMail.name)||'';
     const exName=exNm&&exNm!==exEmail&&exNm!==qd.expId?exNm:'';
     const exSrc=exInfo&&exInfo.src==='archive'?' \u00b7 Archive':'';
+    const exQtc=exVendor?'':(window.qExpectedQtc?window.qExpectedQtc(qd):'');
+    const exQtcLine=exQtc?`<div class="dc-meta"><span class="dc-mi">🎯</span><span class="dc-mt"><b style="color:#f59e0b">Expected QTC:</b> ${esc(exQtc)}</span></div>`:'';
     const exBlock=exVendor
       ?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt">Expected Email: Another Vendor</span></div>`
       :(exEmail||exName)
-        ?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt">Expected Email: ${esc(exEmail||'\u2014')}</span></div>${exName?`<div class="dc-meta"><span class="dc-mi">\ud83e\uddd1\u200d\ud83d\udcbb</span><span class="dc-mt">Expected by: ${esc(exName)}${esc(exSrc)}</span></div>`:''}`
+        ?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt">Expected Email: ${esc(exEmail||'\u2014')}</span></div>${exName?`<div class="dc-meta"><span class="dc-mi">\ud83e\uddd1\u200d\ud83d\udcbb</span><span class="dc-mt">Expected by: ${esc(exName)}${esc(exSrc)}</span></div>`:''}${exQtcLine}`
         :(qd.expId?`<div class="dc-meta"><span class="dc-mi">\ud83d\udce7</span><span class="dc-mt" style="color:var(--muted)">Expected Email: not found (ID ${esc(qd.expId)})</span></div>`:'');
     return `<div class="dcard" data-aid="${esc(aid)}" role="button" tabindex="0" title="Click for details" onclick="openQualityTaskCard(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openQualityTaskCard(this)}" style="cursor:pointer;border-color:${col}55;background:${col}0d">
       <div class="dc-top"><span class="dc-pc" style="color:${col}">🆔 ${esc(aid)}</span></div>
-      ${person?`<div class="dc-meta"><span class="dc-mi">👤</span><span class="dc-mt">${esc(person)}</span></div>${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}${qtc?`<div class="dc-meta"><span class="dc-mi">🏷️</span><span class="dc-mt">${esc(qtc)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">${grp?SHIFT_GROUP_ICON[grp]:''}</span><span class="dc-mt">${esc(grp||'—')} Shift</span></div>`:`${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">🚫</span><span class="dc-mt">Unmatched</span></div>`}
+      ${person?`<div class="dc-meta"><span class="dc-mi">👤</span><span class="dc-mt">${esc(person)}</span></div>${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}${qtc?`<div class="dc-meta"><span class="dc-mi">🏷️</span><span class="dc-mt"><b style="color:${col}">Actual QTC:</b> ${esc(qtc)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">${grp?SHIFT_GROUP_ICON[grp]:''}</span><span class="dc-mt">${esc(grp||'—')} Shift</span></div>`:`${email?`<div class="dc-meta"><span class="dc-mi">✉️</span><span class="dc-mt">${esc(email)}</span></div>`:''}<div class="dc-meta"><span class="dc-mi">🚫</span><span class="dc-mt">Unmatched</span></div>`}
       <div class="dc-meta"><span class="dc-mi">🧩</span><span class="dc-mt">Artifacts: ${qFmt(qNum(qd.artifacts))}</span></div>
       <div class="dc-meta"><span class="dc-mi">🏷️</span><span class="dc-mt">Attribute: ${qFmt(qNum(qd.attribute))}</span></div>
       <div class="dc-meta"><span class="dc-mi">📐</span><span class="dc-mt">TVA F1: ${qFmt(qNum(qd.tvaF1))}</span></div>
@@ -5180,7 +5184,7 @@ window.openQualityPerson=function(tr){
  const list='<div class="pn-h">Tasks with quality ('+tasks.length+') <span class="qpt-hint">lowest first</span></div>'+tasks.map(t=>{
   const tier=accTier(qNum(t.q.totalAccuracy)),url=safeUrl(String(t.q.gulpUrl||t.link||'').trim()),ok=!!url;
   return '<div class="qpt"'+(window._qFocusId&&t.aid===window._qFocusId?' style="box-shadow:0 0 0 1.5px var(--primary)"':'')+'><div class="qpt-t"><b>'+esc(t.aid)+'</b><span style="color:'+tier.c+';background:'+tier.bg+';border:1px solid '+tier.bd+'">'+qFmt(qNum(t.q.totalAccuracy))+'</span></div>'
-  +row('Sent to (QTC)',t.qtc?esc(t.qtc):'')+row('Actual Date',esc(t.q.actDate||''))+row('Expected Date',esc(t.q.expDate||''))+row('Expected Email',window.qExpectedText?window.qExpectedText(t.q):'')
+  +row('Actual QTC',t.qtc?esc(t.qtc):'')+row('Actual Date',esc(t.q.actDate||''))+row('Expected Date',esc(t.q.expDate||''))+row('Expected Email',window.qExpectedText?window.qExpectedText(t.q):'')+row('Expected QTC',window.qExpectedQtc?esc(window.qExpectedQtc(t.q)):'')
   +'<div class="qpt-r"><span>Artifacts \u00b7 Attr \u00b7 TVA</span><em>'+qFmt(qNum(t.q.artifacts))+' \u00b7 '+qFmt(qNum(t.q.attribute))+' \u00b7 '+qFmt(qNum(t.q.tvaF1))+'</em></div>'
   +'<div class="qpt-r"><span>GULP Diff URL</span>'+(ok?'<a href="'+esc(url)+'" target="_blank" rel="noopener">Open \u2197</a>':'<em style="color:var(--muted)">'+(url?esc(url):'no link')+'</em>')+'</div></div>';}).join('');
  G('pnBars').innerHTML=bars+list;
@@ -6151,6 +6155,15 @@ window.qExpectedText=function(q){
   var email=raw||(ei&&ei.email)||'';if(!email)return '';
   var nm=(ei&&ei.name)||(em[email.toLowerCase()]&&em[email.toLowerCase()].name)||'';
   return esc(email)+(nm&&nm!==email?' \u00b7 '+esc(nm):'');
+};
+/* QTC of the Expected task: the Expected ID's own Data Base / Archive row if the sheet gives one, else the TL/QTC the Teams tab lists that Yubikey under, else the QTC that email is most often sent to in Data Base */
+window.qExpectedQtc=function(q){
+  var raw=String(q.expEmail||'').trim();if(/^[-\u2013\u2014]+$/.test(raw))return '';
+  var idInfo=window._qualityIdInfo||{},em=window._qEmailInfo||{},ei=q.expId?idInfo[q.expId]:null;
+  var email=raw||(ei&&ei.email)||'',t=ei&&ei.qtc?ei.qtc:'';
+  if(!t&&email&&typeof teamsTL==='object'){var tl=String(teamsTL[teamsKey(email)]||'').trim();if(tl&&tl!=='-')t=tl;}
+  if(!t&&email&&em[email.toLowerCase()])t=em[email.toLowerCase()].qtc||'';
+  return t;
 };
 window.openQualityTaskCard=function(el){
   var aid=el&&el.dataset?el.dataset.aid:String(el||'');if(!aid||typeof window.openQualityPerson!=='function')return;
