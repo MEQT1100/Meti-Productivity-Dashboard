@@ -4053,6 +4053,32 @@ function fixTsDMY(row,ti,ci){
    When a QTC's name was later written in full (4 parts), his old and new rows showed as two people. Here every Qtc Name is grouped with the SHORTEST name
    that is the beginning of it, only when the shift written in brackets is the same, and shown under that shortest name (search, filters, tables, Analysis, Quality).
    Safety: the short name needs 2+ words; if one short name is the beginning of two DIFFERENT longer names (neither starts with the other) nothing is merged for it. */
+/* ===== SMART NAME MATCHING (automatic — no need to add names by hand) =====
+   Two spellings are the SAME PERSON when (same shift tag AND):
+     • each word is compared by its consonant "skeleton", so Youssef = Yousef = Yusuf, Mohamed = Mohammed = Muhammad, Fathy = Fathi, Ahmed = Ahmad ...
+     • the first name matches, and every word of the shorter name appears (in the same order) inside the longer name
+       → "Yousef Fathy"  =  "Youssef Ahmed Fathy Hassan"
+   Safety: the shorter name needs 2+ words; if one short name fits two DIFFERENT longer people nothing is merged (it is listed in the console).
+   Manual rules: QTC_ALIASES (force a merge) and QTC_NEVER_MERGE (block a wrong merge). */
+const QTC_NEVER_MERGE=[
+  /* ['Name One','Name Two'],  ← these two will never be merged automatically (letters only, any case, shift tag ignored) */
+];
+function _tokKey(t){
+  t=String(t).toLowerCase().replace(/[^a-z]/g,'');if(!t)return '';
+  t=t.replace(/(.)\1+/g,'$1');                                   // double letters: youssef → yousef, mohammed → mohamed
+  t=t.replace(/^(abd|abdel|abdul|abdal)(?=[a-z])/,'abd');         // Abdelrahman / Abdulrahman / Abd Rahman prefix
+  t=t.replace(/^(el|al)(?=[a-z]{3,})/,'');                         // ElSayed / AlSayed
+  return t.charAt(0)+t.slice(1).replace(/[aeiouy]/g,'');           // keep first letter, drop vowels: yousef → ysf, fathy → fth
+}
+function _nameKeys(toks){return toks.map(_tokKey).filter(Boolean);}
+function _sameKeys(ka,kb){
+  const a=ka.length<=kb.length?ka:kb,b=ka.length<=kb.length?kb:ka;
+  if(a.length<2||a[0]!==b[0])return false;
+  let j=1;for(let i=1;i<a.length;i++){while(j<b.length&&b[j]!==a[i])j++;if(j>=b.length)return false;j++;}
+  return true;
+}
+const _neverSet=new Set(QTC_NEVER_MERGE.map(p=>p.map(x=>String(x).toLowerCase().replace(/[^a-z]/g,'')).sort().join('|')));
+function _blocked(a,b){if(!_neverSet.size)return false;const f=x=>x.toks.join('').replace(/[^a-z]/g,'');return _neverSet.has([f(a),f(b)].sort().join('|'));}
 function canonQtc(){
   const ci=sIdx['Qtc Name'];if(ci===undefined)return;
   /* typos in the bracket first: "(ON))" → "(ON)", "(ON" → "(ON)", "( ON )" → "(ON)" — otherwise the name never matches its short version */
@@ -4069,20 +4095,20 @@ function canonQtc(){
     const m=/^(.*?)\s*(\([^)]*\))\s*$/.exec(raw);
     const base=(m?m[1]:raw).replace(/\s+/g,' ').trim(),sh=(m?m[2]:'').replace(/\s+/g,'').toLowerCase();
     const toks=base.toLowerCase().split(' ').filter(Boolean);
-    const o={raw,toks,n};info.push(o);
+    const o={raw,toks,n,keys:_nameKeys(toks)};info.push(o);
     (groups.get(sh)||groups.set(sh,[]).get(sh)).push(o);
   });
   const map=new Map(),ambiguous=[];
-  const isPre=(a,b)=>a.length<b.length&&a.every((t,i)=>t===b[i]);
+  const same=(a,b)=>!_blocked(a,b)&&_sameKeys(a.keys,b.keys);
   groups.forEach(list=>{
-    list.sort((a,b)=>a.toks.length-b.toks.length);
-    list.forEach(b=>{
+    list.sort((a,b)=>a.toks.length-b.toks.length||b.n-a.n);   // shortest name first; same length → the one with more rows is the main spelling
+    list.forEach((b,bi)=>{
       if(map.has(b.raw))return;
-      const shorter=list.filter(a=>a!==b&&a.toks.length>=2&&isPre(a.toks,b.toks));
+      const shorter=list.slice(0,bi).filter(a=>a.toks.length>=2&&same(a,b));
       if(!shorter.length)return;
-      const root=shorter[0];                                   // the shortest one (list is sorted by length)
-      const longer=list.filter(x=>x!==root&&isPre(root.toks,x.toks));
-      const clash=longer.some(x=>longer.some(y=>x!==y&&!isPre(x.toks,y.toks)&&!isPre(y.toks,x.toks)));
+      const root=shorter[0];
+      const longer=list.filter(x=>x!==root&&same(root,x));
+      const clash=longer.some(x=>longer.some(y=>x!==y&&!same(x,y)));
       if(clash){ambiguous.push(root.raw+'  ⟵  '+longer.map(x=>x.raw).join(' | '));return;}
       map.set(b.raw,root.raw);
     });
