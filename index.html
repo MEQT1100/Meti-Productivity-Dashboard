@@ -6182,5 +6182,56 @@ window.openQualityTaskCard=function(el){
   window.openQualityPerson({dataset:{grp:grp,key:key}});
 };
 </script>
+<style id="user-menu-css">
+html body .hdr #prefBtn,html body .hdr .logout-btn{display:none!important}
+html body .hdr .user-chip{cursor:var(--cur-ptr,pointer);user-select:none}
+html body .hdr .user-chip::after{content:"\25BE";font-size:.7rem;color:var(--muted);margin-left:2px;transition:transform .2s}
+html body .hdr .user-chip[aria-expanded="true"]::after{transform:rotate(180deg)}
+html body .hdr .user-chip:focus-visible{outline:2px solid #00e5d4;outline-offset:2px}
+#userMenu{position:fixed;z-index:9999;width:240px;display:none;padding:6px;border-radius:16px;background:var(--card,var(--glass,#fff));color:var(--text);border:1px solid var(--border-light,var(--border));box-shadow:var(--shadow-hover,0 12px 32px rgba(0,0,0,.25));font-family:var(--font)}
+#userMenu.open{display:block}
+#userMenu .um-h{padding:10px 12px 8px;border-bottom:1px solid var(--border-light,var(--border));margin-bottom:4px}
+#userMenu .um-n{font-weight:700;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#userMenu .um-s{font-size:.68rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+#userMenu .um-i{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:0;border-radius:10px;background:none;color:var(--text);font:600 .8rem var(--font);text-align:left;cursor:var(--cur-ptr,pointer)}
+#userMenu .um-i:hover,#userMenu .um-i:focus-visible{background:var(--accent-light,rgba(0,229,212,.12));outline:none}
+#userMenu .um-i.danger{color:var(--danger,#c4293f)}
+#userMenu .um-i.danger:hover,#userMenu .um-i.danger:focus-visible{background:rgba(196,41,63,.12)}
+</style>
+<script id="user-menu-js">
+(function(){
+  var chip=document.getElementById('userChip');if(!chip)return;
+  var menu=document.createElement('div');menu.id='userMenu';menu.setAttribute('role','menu');
+  document.body.appendChild(menu);
+  chip.setAttribute('role','button');chip.setAttribute('tabindex','0');chip.setAttribute('aria-haspopup','menu');chip.setAttribute('aria-expanded','false');
+  function mk(cls,txt){var d=document.createElement('div');d.className=cls;d.textContent=txt;return d;}
+  function item(label,cls,fn){var b=document.createElement('button');b.type='button';b.className='um-i '+(cls||'');b.setAttribute('role','menuitem');b.textContent=label;b.addEventListener('click',function(e){close();fn(e);});return b;}
+  function close(){menu.classList.remove('open');chip.setAttribute('aria-expanded','false');}
+  function open(){
+    var em=(typeof getLoggedInEmail==='function')?getLoggedInEmail():'';
+    var nm=(typeof getDisplayName==='function'&&em)?getDisplayName(em):'';
+    var rl=(typeof getUserRole==='function'&&em)?getUserRole(em):'';
+    menu.textContent='';
+    var h=document.createElement('div');h.className='um-h';
+    h.appendChild(mk('um-n',nm||em||'Account'));
+    h.appendChild(mk('um-s',[rl,em].filter(Boolean).join(' · ')));
+    menu.appendChild(h);
+    menu.appendChild(item('🖱️  Mouse & sound','',function(e){if(typeof prefToggle==='function')prefToggle(e);}));
+    menu.appendChild(item('🚪  Logout','danger',function(){if(typeof logoutUser==='function')logoutUser();}));
+    menu.classList.add('open');
+    var r=chip.getBoundingClientRect(),w=menu.offsetWidth;
+    menu.style.top=(r.bottom+8)+'px';
+    menu.style.left=Math.max(12,Math.min(r.left,window.innerWidth-w-12))+'px';
+    chip.setAttribute('aria-expanded','true');
+    var f=menu.querySelector('.um-i');if(f&&chip.matches(':focus-visible'))f.focus();
+  }
+  function toggle(){menu.classList.contains('open')?close():open();}
+  chip.addEventListener('click',function(e){e.stopPropagation();toggle();});
+  chip.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+  menu.addEventListener('keydown',function(e){if(e.key==='Escape'){close();chip.focus();}});
+  document.addEventListener('click',function(e){if(!e.target.closest('#userMenu,#userChip'))close();});
+  window.addEventListener('resize',close);window.addEventListener('scroll',close,{passive:true});
+})();
+</script>
 </body>
 </html>
