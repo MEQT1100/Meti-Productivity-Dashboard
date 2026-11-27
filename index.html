@@ -4764,7 +4764,7 @@ function rdCopyText(r){
   if(id)L.push('Task: '+id);
   if(ts)L.push('Time: '+ts);
   {const sh=g('shift');if(sh)L.push('Shift: '+sh);}
-  {const stg=g('stage'),ps=g('pass');if(stg)L.push('Type: '+(/lidar/i.test(stg)?'Lidar':'Lane Line'));if(ps)L.push('Pass: '+ps);}
+  {const stg=g('stage'),md=g('modality'),ps=g('pass');if(stg||md)L.push('Type: '+anTypeOf(md,stg));if(ps)L.push('Pass: '+ps);}
   {const ol=objLine(g('object count'));if(ol)L.push(ol);}
   if(link)L.push('Link: '+link);
   if(lab)L.push('Labeler: '+lab+(lr?' — '+lr:''));
@@ -5593,6 +5593,8 @@ function fmtDT(v){
   return day+' '+h+':'+mi+(se!=null?':'+se:'')+' '+ap;
 }
 function isTsHdr(h){h=String(h||'').trim().toLowerCase();return h==='timestamp'||h==='created at'||h==='date'||h==='time';}
+/* Task type = Modality column (same value Task Detail shows). Stage is only a fallback when Modality is empty/unknown. */
+function anTypeOf(mod,stg){const m=normMod(mod);if(m==='Lidar'||m==='Lane Line')return m;return /lidar/i.test(String(stg||''))?'Lidar':'Lane Line';}
 function anCol(n){return hdrs.findIndex(h=>h.toLowerCase()===n.toLowerCase());}
 function anYmd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 /* ---- anTasks: built ONCE per data load (cached) instead of on every render. Single pass, no 28k-row temp arrays,
@@ -5612,7 +5614,7 @@ function anCacheTick(){   // called on every renderAllSections
 function anById(id){if(!_anTM){_anTM=new Map();(_anTC||[]).forEach(t=>_anTM.set(t.id,t));}return _anTM.get(id);}
 function anTasks(){
   if(_anTC&&_anTK===rawRows&&_anTN===rawRows.length)return _anTC;
-  const c={id:anCol('Id'),lab:anCol('Labeler Name'),qc:anCol('Qtc Name'),st:anCol('Stage'),pass:anCol('Pass'),at:tsColIdx(hdrs),lnk:anCol('Task Link'),sh:anCol('Shift'),obj:anCol('Object Count')};
+  const c={id:anCol('Id'),lab:anCol('Labeler Name'),qc:anCol('Qtc Name'),st:anCol('Stage'),md:anCol('Modality'),pass:anCol('Pass'),at:tsColIdx(hdrs),lnk:anCol('Task Link'),sh:anCol('Shift'),obj:anCol('Object Count')};
   _anLnkC=c.lnk;
   const SH={Morning:'M',Night:'N',Overnight:'ON'},qcM=new Map(),shM=new Map(),dayM=new Map(),best=new Map();
   for(let i=0;i<rawRows.length;i++){
@@ -5625,7 +5627,7 @@ function anTasks(){
     if(!sh){const v=rawSh.toLowerCase();sh=[rawSh.trim(),/over/.test(v)?'ON':/night/.test(v)?'N':/morn|day/.test(v)?'M':''];shM.set(rawSh,sh);}
     let day='';if(d){const y=anYmd(d);day=dayM.get(y);if(!day){day=y;dayM.set(y,y);}}
     const ob=c.obj>=0?parseFloat(String(r[c.obj]??'').replace(/,/g,'')):NaN;
-    best.set(id,new AnT(id,String(r[c.lab]||'').trim(),q[0],q[1],/lidar/i.test(String(r[c.st]||''))?'Lidar':'Lane Line',String(r[c.pass]||'').trim(),c.sh>=0?sh[0]:'',isNaN(ob)?null:ob,sh[1],time,day,r));
+    best.set(id,new AnT(id,String(r[c.lab]||'').trim(),q[0],q[1],anTypeOf(c.md>=0?r[c.md]:'',c.st>=0?r[c.st]:''),String(r[c.pass]||'').trim(),c.sh>=0?sh[0]:'',isNaN(ob)?null:ob,sh[1],time,day,r));
   }
   _anTC=Array.from(best.values());_anTM=null;_anTK=rawRows;_anTN=rawRows.length;
   return _anTC;
